@@ -62,8 +62,8 @@ class LLMGenerator:
             base_url=self.base_url
         )
 
-        # 高等数学专用 System Prompt
-        self.system_prompt = """你是一位高等数学助教。请根据提供的教材内容，准确回答学生的问题。
+        # 高等数学专用 System Prompt（使用原始字符串 r"""...""" 避免反斜杠转义问题）
+        self.system_prompt = r"""你是一位高等数学助教。请根据提供的教材内容，准确回答学生的问题。
 
 规则：
 1. 只使用提供的上下文来回答问题，不要编造教材中没有的内容。
