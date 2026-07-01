@@ -20,22 +20,29 @@ st.set_page_config(
     layout="wide"
 )
 
-# ============== 加载 KaTeX（支持公式渲染） ==============
-def load_katex():
-    """加载 KaTeX 的 CSS 和 JS，并准备渲染函数"""
-    st.markdown(
-        """
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-        <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
-        """,
-        unsafe_allow_html=True
-    )
+# ============== 引入 KaTeX 支持公式渲染 ==============
+st.markdown(
+    """
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+            delimiters: [
+                {left: '$$', right: '$$', display: true},
+                {left: '\\(', right: '\\)', display: false},
+                {left: '\\[', right: '\\]', display: true}
+            ]
+        });">
+    </script>
+    """,
+    unsafe_allow_html=True
+)
 
-load_katex()
-
-# ============== 读取 API Key ==============
+# ============== 读取 API Key（兼容本地和云端） ==============
 def get_deepseek_key():
+    """获取 DeepSeek API Key，支持多种来源"""
+
+    # --- 方法1：从 st.secrets 读取（Streamlit Cloud） ---
     try:
         if hasattr(st, 'secrets') and st.secrets:
             key = st.secrets.get("DEEPSEEK_API_KEY")
@@ -44,6 +51,7 @@ def get_deepseek_key():
     except Exception:
         pass
 
+    # --- 方法2：从 .env 文件读取（本地） ---
     try:
         from dotenv import load_dotenv
         env_path = project_root / ".env"
@@ -55,13 +63,22 @@ def get_deepseek_key():
     except Exception:
         pass
 
+    # --- 方法3：直接从 os.environ 读取 ---
     key = os.environ.get("DEEPSEEK_API_KEY")
     if key:
         return key
 
+    # --- 都没找到，报错 ---
     st.error("""
     ❌ 未找到 DEEPSEEK_API_KEY！
-    请参考部署文档配置。
+    
+    **本地运行**：在项目根目录创建 `.env` 文件，写入：
+    DEEPSEEK_API_KEY=sk-你的真实密钥
+    DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+
+    **Streamlit Cloud**：在 Manage app → Secrets 中配置：
+    DEEPSEEK_API_KEY = "sk-你的真实密钥"
+    DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
     """)
     return None
 
@@ -71,7 +88,7 @@ if DEEPSEEK_API_KEY:
 else:
     st.stop()
 
-# ============== 导入项目模块 ==============
+# ============== 导入我们的模块 ==============
 from src.loader.pdf_loader import PDFLoader
 from src.splitter.structural_splitter import smart_split_by_titles, save_chunks_to_files
 from src.retriever.retriever import MathRAGRetriever
@@ -83,6 +100,7 @@ with st.sidebar:
     st.caption("基于双阶段检索的高等数学知识库问答系统")
     st.divider()
 
+    # 系统状态
     st.subheader("📊 系统状态")
     chunks_dir = Path("data/chunks")
     index_exists = Path("data/faiss_index").exists()
@@ -95,6 +113,7 @@ with st.sidebar:
     col3.metric("🧠 模型", "✅" if index_exists else "❌")
     st.divider()
 
+    # 上传 PDF
     st.subheader("📤 上传教材")
     uploaded_file = st.file_uploader(
         "上传 PDF 文件（高等数学教材）",
@@ -156,13 +175,12 @@ if not index_exists or not meta_exists:
     st.warning("⚠️ 未检测到知识库，请在左侧上传 PDF 并点击「构建知识库」")
     st.stop()
 
-# ========== 渲染历史消息 ==========
+# 显示历史消息（支持公式渲染）
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        # 使用 markdown 渲染，同时允许 HTML
+        # 使用 unsafe_allow_html=True 让 KaTeX 生效
         st.markdown(message["content"], unsafe_allow_html=True)
 
-        # 显示检索到的片段（如果有）
         if message["role"] == "assistant" and "contexts" in message:
             with st.expander("📖 查看检索到的相关片段"):
                 for i, (content, score) in enumerate(message["contexts"]):
@@ -185,10 +203,9 @@ if prompt := st.chat_input("输入你的高数问题..."):
                     st.stop()
 
                 result = st.session_state.pipeline.ask(prompt)
-                answer = result["answer"]
 
-                # 显示答案
-                st.markdown(answer, unsafe_allow_html=True)
+                # 显示答案（使用 unsafe_allow_html=True）
+                st.markdown(result["answer"], unsafe_allow_html=True)
 
                 # 显示检索细节
                 with st.expander("📖 查看检索到的相关片段"):
@@ -196,47 +213,12 @@ if prompt := st.chat_input("输入你的高数问题..."):
                         st.caption(f"片段 {i+1} (相关性: {score:.4f})")
                         st.text(content[:300] + "..." if len(content) > 300 else content)
 
-                # 保存消息
+                # 保存到历史
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": answer,
+                    "content": result["answer"],
                     "contexts": result["contexts"]
                 })
-
-                # ---------- 强制渲染 KaTeX（关键修复） ----------
-                # 在消息更新后，调用 JavaScript 重新扫描并渲染所有公式
-                st.components.v1.html(
-                    """
-                    <script>
-                        // 等待 KaTeX 加载完成
-                        function renderMath() {
-                            if (typeof renderMathInElement !== 'undefined') {
-                                try {
-                                    renderMathInElement(document.body, {
-                                        delimiters: [
-                                            {left: '$$', right: '$$', display: true},
-                                            {left: '\\(', right: '\\)', display: false},
-                                            {left: '\\[', right: '\\]', display: true}
-                                        ],
-                                        throwOnError: false
-                                    });
-                                } catch (e) {
-                                    console.warn('KaTeX render error:', e);
-                                }
-                            } else {
-                                // 如果还没加载，延迟重试
-                                setTimeout(renderMath, 500);
-                            }
-                        }
-                        // 立即执行，并延迟执行确保 DOM 更新
-                        setTimeout(renderMath, 100);
-                        setTimeout(renderMath, 500);
-                    </script>
-                    """,
-                    height=0,
-                    scrolling=False
-                )
-                # ---------- 强制渲染结束 ----------
 
             except Exception as e:
                 st.error(f"❌ 出错了: {e}")
@@ -246,7 +228,3 @@ if st.session_state.messages:
     if st.button("🗑️ 清空对话"):
         st.session_state.messages = []
         st.rerun()
-
-# 在每次页面加载时，也触发一次渲染（针对已存在的消息）
-# 但 st.components.v1.html 会在页面加载后执行，我们也可以放在这里
-# 不过我们已经在消息更新时渲染了，所以就不重复执行了。
