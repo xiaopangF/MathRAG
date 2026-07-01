@@ -1,17 +1,7 @@
-import streamlit as st
-import os
-
-# 优先从 Streamlit Cloud 的 secrets 中读取 API Key
-try:
-    deepseek_api_key = st.secrets["DEEPSEEK_API_KEY"]
-    deepseek_base_url = st.secrets.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-except:
-    # 如果本地没有 secrets，则从 .env 文件读取（用于本地测试）
-    from dotenv import load_dotenv
-
-    load_dotenv()
-    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-    deepseek_base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+"""
+MathRAG Web 界面
+基于 Streamlit 的高等数学知识库问答系统
+"""
 import sys
 from pathlib import Path
 
@@ -20,16 +10,9 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 import os
-import sys
 import tempfile
-from pathlib import Path
-
 import streamlit as st
 import pandas as pd
-
-# 把项目根目录加到 Python 路径
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
 
 # 导入我们的模块
 from src.loader.pdf_loader import PDFLoader
