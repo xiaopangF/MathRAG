@@ -13,21 +13,32 @@ import os
 import tempfile
 import streamlit as st
 
+# ============== 页面设置 ==============
+st.set_page_config(
+    page_title="MathRAG - 高数知识库问答",
+    page_icon="📐",
+    layout="wide"
+)
+
 # ============== 读取 API Key（兼容本地和云端） ==============
-# 注意：st.secrets 必须在导入 streamlit 之后才能使用
 
-def get_api_key():
-    """获取 DeepSeek API Key，优先从 st.secrets 读取，fallback 到 .env"""
-    # 方法1：从 Streamlit Cloud Secrets 读取
+def get_deepseek_key():
+    """获取 DeepSeek API Key，支持多种来源"""
+
+    # --- 方法1：从 st.secrets 读取（Streamlit Cloud） ---
     try:
-        key = st.secrets.get("DEEPSEEK_API_KEY")
-        if key:
-            print("✅ 从 Streamlit Secrets 读取 API Key 成功")
-            return key
-    except Exception:
-        pass
+        # 检查 st.secrets 是否可用
+        if hasattr(st, 'secrets') and st.secrets:
+            key = st.secrets.get("DEEPSEEK_API_KEY")
+            if key:
+                st.success("✅ 从 Streamlit Secrets 读取 API Key 成功")
+                return key
+            else:
+                st.warning("⚠️ st.secrets 存在，但未找到 DEEPSEEK_API_KEY")
+    except Exception as e:
+        st.warning(f"⚠️ 读取 st.secrets 失败: {e}")
 
-    # 方法2：从 .env 文件读取（本地开发）
+    # --- 方法2：从环境变量读取（本地 .env 通过 load_dotenv 加载） ---
     try:
         from dotenv import load_dotenv
         env_path = project_root / ".env"
@@ -35,49 +46,55 @@ def get_api_key():
             load_dotenv(env_path)
             key = os.getenv("DEEPSEEK_API_KEY")
             if key:
-                print(f"✅ 从 .env 文件读取 API Key 成功")
+                st.success(f"✅ 从 .env 文件读取 API Key 成功")
                 return key
-    except Exception:
-        pass
+            else:
+                st.warning(f"⚠️ .env 文件存在，但未找到 DEEPSEEK_API_KEY")
+        else:
+            st.warning(f"⚠️ .env 文件不存在: {env_path}")
+    except Exception as e:
+        st.warning(f"⚠️ 读取 .env 失败: {e}")
 
-    # 如果都没找到，返回 None
+    # --- 方法3：直接从 os.environ 读取（备用） ---
+    key = os.environ.get("DEEPSEEK_API_KEY")
+    if key:
+        st.success("✅ 从环境变量读取 API Key 成功")
+        return key
+
+    # --- 都没找到，报错 ---
+    st.error("""
+    ❌ 未找到 DEEPSEEK_API_KEY！
+    
+    **如果在本地运行：**
+    1. 在项目根目录创建 `.env` 文件
+    2. 写入：
+       DEEPSEEK_API_KEY=sk-你的真实密钥
+       DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+    
+    **如果在 Streamlit Cloud 部署：**
+    1. 点击右下角「Manage app」
+    2. 选择「Secrets」选项卡
+    3. 粘贴：
+       DEEPSEEK_API_KEY = "sk-你的真实密钥"
+       DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+    4. 点击 Save，等待重新部署
+    """)
     return None
 
-# 获取 API Key 并存入环境变量，方便其他模块读取
-DEEPSEEK_API_KEY = get_api_key()
+# 获取 API Key
+DEEPSEEK_API_KEY = get_deepseek_key()
 if DEEPSEEK_API_KEY:
     os.environ["DEEPSEEK_API_KEY"] = DEEPSEEK_API_KEY
 else:
-    # 如果是在云端部署，缺失密钥会在这里提示
-    if "st.secrets" in str(sys.modules.get("streamlit", {})):
-        st.error("""
-        ❌ 未找到 DEEPSEEK_API_KEY！
-        
-        请在 Streamlit Cloud 的 Secrets 中配置：
-        1. 点击右下角「Manage app」
-        2. 选择「Secrets」选项卡
-        3. 添加：
-           DEEPSEEK_API_KEY = "sk-你的真实密钥"
-           DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-        """)
-        st.stop()
-    else:
-        st.error("""
-        ❌ 未找到 DEEPSEEK_API_KEY！
-        
-        本地运行：请在项目根目录创建 .env 文件，并写入：
-        DEEPSEEK_API_KEY=sk-xxx
-        DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-        """)
-        st.stop()
+    st.stop()  # 没有 Key 就停止运行
 
-# ... 后面是原来的导入和界面代码
-# ============== 页面设置 ==============
-st.set_page_config(
-    page_title="MathRAG - 高数知识库问答",
-    page_icon="📐",
-    layout="wide"
-)
+# ============== 以下导入需要 API Key 的模块 ==============
+
+# 导入我们的模块
+from src.loader.pdf_loader import PDFLoader
+from src.splitter.structural_splitter import smart_split_by_titles, save_chunks_to_files
+from src.retriever.retriever import MathRAGRetriever
+from src.pipeline.qa_pipeline import MathRAGPipeline
 
 # ============== 侧边栏：系统状态与操作 ==============
 with st.sidebar:
