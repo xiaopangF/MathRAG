@@ -6,12 +6,11 @@ import os
 from pathlib import Path
 from typing import Dict, Any
 
-# 导入我们之前写好的模块
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from retriever.retriever import MathRAGRetriever
-from generation.llm_generator import LLMGenerator
-
+from pathlib import Path
+# 不再需要手动修改 sys.path（app.py 已经做了）
+from src.retriever.retriever import MathRAGRetriever
+from src.generation.llm_generator import LLMGenerator
 
 class MathRAGPipeline:
     """完整的问答流水线"""
