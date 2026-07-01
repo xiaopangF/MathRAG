@@ -12,14 +12,66 @@ sys.path.insert(0, str(project_root))
 import os
 import tempfile
 import streamlit as st
-import pandas as pd
 
-# 导入我们的模块
-from src.loader.pdf_loader import PDFLoader
-from src.splitter.structural_splitter import smart_split_by_titles, save_chunks_to_files
-from src.retriever.retriever import MathRAGRetriever
-from src.pipeline.qa_pipeline import MathRAGPipeline
+# ============== 读取 API Key（兼容本地和云端） ==============
+# 注意：st.secrets 必须在导入 streamlit 之后才能使用
 
+def get_api_key():
+    """获取 DeepSeek API Key，优先从 st.secrets 读取，fallback 到 .env"""
+    # 方法1：从 Streamlit Cloud Secrets 读取
+    try:
+        key = st.secrets.get("DEEPSEEK_API_KEY")
+        if key:
+            print("✅ 从 Streamlit Secrets 读取 API Key 成功")
+            return key
+    except Exception:
+        pass
+
+    # 方法2：从 .env 文件读取（本地开发）
+    try:
+        from dotenv import load_dotenv
+        env_path = project_root / ".env"
+        if env_path.exists():
+            load_dotenv(env_path)
+            key = os.getenv("DEEPSEEK_API_KEY")
+            if key:
+                print(f"✅ 从 .env 文件读取 API Key 成功")
+                return key
+    except Exception:
+        pass
+
+    # 如果都没找到，返回 None
+    return None
+
+# 获取 API Key 并存入环境变量，方便其他模块读取
+DEEPSEEK_API_KEY = get_api_key()
+if DEEPSEEK_API_KEY:
+    os.environ["DEEPSEEK_API_KEY"] = DEEPSEEK_API_KEY
+else:
+    # 如果是在云端部署，缺失密钥会在这里提示
+    if "st.secrets" in str(sys.modules.get("streamlit", {})):
+        st.error("""
+        ❌ 未找到 DEEPSEEK_API_KEY！
+        
+        请在 Streamlit Cloud 的 Secrets 中配置：
+        1. 点击右下角「Manage app」
+        2. 选择「Secrets」选项卡
+        3. 添加：
+           DEEPSEEK_API_KEY = "sk-你的真实密钥"
+           DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+        """)
+        st.stop()
+    else:
+        st.error("""
+        ❌ 未找到 DEEPSEEK_API_KEY！
+        
+        本地运行：请在项目根目录创建 .env 文件，并写入：
+        DEEPSEEK_API_KEY=sk-xxx
+        DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+        """)
+        st.stop()
+
+# ... 后面是原来的导入和界面代码
 # ============== 页面设置 ==============
 st.set_page_config(
     page_title="MathRAG - 高数知识库问答",
