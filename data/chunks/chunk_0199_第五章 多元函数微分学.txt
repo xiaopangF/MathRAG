@@ -1,0 +1,297 @@
+标题: 第五章 多元函数微分学
+==================================================
+
+lim
+Δ x→0
+o(ρ)
+Δx = lim
+Δx→0
+o(ρ)
+ρ
+ρ
+Δx
+= lim
+Δx→0
+o(
+(Δu)
+2 + (Δv)
+2 )
+(Δu)
+2 + (Δv)
+2
+Δu
+Δx
+2
++
+Δv
+Δx
+2
+= 0.
+故有
+z
+x =
+f
+u
+u
+x +
+f
+v
+v
+x,
+同理可得
+z
+y =
+f
+u
+u
+y +
+f
+v
+v
+y.
+类似地可以得到自变量多于两个时的情况.
+设u = u( x, y, s), v = v( x, y, s)在点( x, y, s)处的偏导数均存在,函数z
+= f( u, v)在对应点( u, v)可微,则复合函数z = f[ u( x, y, s), v( x, y,s)]在点
+( x, y,s)处的偏导数
+z
+x,
+z
+y, z
+s均存在,且有链式求导法则:
+z
+x =
+f
+u
+u
+x +
+f
+v
+v
+x,
+z
+y =
+f
+u
+u
+y +
+f
+v
+v
+y,
+z
+s =
+f
+u
+u
+s +
+f
+v
+v
+s.
+注意,这里要求f 在点( u, v)可微,不能减弱为f 在( u, v)存在偏导数.
+下面讨论以下几种情况:
+1. 中间变量多于两个的情况.
+设z = f( u, v, w), u = u( x, y), v = v( x, y), w = w( x, y),则
+z
+x =
+f
+u
+u
+x +
+f
+v
+v
+x +
+f
+w
+w
+x ,
+z
+y =
+f
+u
+u
+y +
+f
+v
+v
+y +
+f
+w
+w
+y .
+2. 中间变量只有一个的情况.
+设z = f( u), u = u( x, y)则
+z
+x = df
+d u
+u
+x = f′( u)
+u
+x,
+z
+y = d f
+d u
+u
+y = f′( u)
+u
+y.
+3. 自变量只有一个的情况.
+·
+8
+2
+·
+微积分(下)
+
+设z = f( u, v), u = u( x), v = v( x),则z 是x 的一元复合函数,它对x 的
+导数称为全导数,有
+d z
+d x =
+f
+u
+d u
+d x +
+f
+v
+d v
+d x.
+设z = f( x, y,t), x = x(s, t), y = y(s, t),则
+z
+s =
+f
+x
+x
+s +
+f
+y
+y
+s,
+z
+t =
+f
+x
+x
+t +
+f
+y
+y
+t +
+f
+t.
+值得注意的是,最后一个等式左端的
+z
+t与右端的
+f
+t其含意是不同的.左端
+的z
+t是视z 为s, t 的函数z = f[ x( s, t), y(s, t), t]将s 作为常数对t 的偏导
+数,而右端
+f
+t是将f( x, y,t)中的x, y 看作常数对t 的偏导数.
+例1 设z = ( x
+2 + y
+2 )
+sin (2 x + y) ,求
+z
+x,
+z
+y.
+解 引入两个中间变量,
+z = u
+v , u = x
+2 + y
+2 , v = sin(2 x + y),
+z
+x =
+f
+u
+u
+x +
+f
+v
+v
+x
+= vu
+v - 1·2 x + u
+vln u·cos(2 x + y)·2
+= sin(2 x + y)·( x
+2 + y
+2 )
+sin(2 x + y) - 1·2 x
+ + ( x
+2 + y
+2 )
+sin( 2 x + y)ln( x
+2 + y
+2 )·cos(2 x + y)·2.
+求
+z
+y由读者完成.
+例2 设z = f( u, v)在R
+2 内有关于x 和y 的一阶连续偏导数, u = x
+2 y,
+v = y
+x ,求
+z
+x,
+z
+y.
+解   
+z
+x =
+f
+u
+u
+x +
+f
+v
+v
+x = 2 xy
+f
+u - y
+x
+2
+f
+v,
+z
+y =
+f
+u
+u
+y +
+f
+v
+v
+y = x
+2
+f
+u + 1
+x
+f
+v.
+例3 设f 可微, z = f( x,e
+x ),求d z
+d x.
+解 引入中间变量y = e
+x ,那么z = f( x, y),而x = x, y = e
+x ,则
+d z
+d x =
+f
+x
+d x
+d x +
+f
+y
+d y
+d x =
+f
+x + e
+x
+f
+y = fx + e
+x fy .
+·
+9
+2
+·

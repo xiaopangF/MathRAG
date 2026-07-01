@@ -1,0 +1,226 @@
+标题: 第五章 多元函数微分学
+==================================================
+
+例4 设f 可微, z = f( x - 2 y
+2 ),求
+z
+x, z
+y.
+解 令u = x - 2 y
+2 , z = f( u),则
+z
+x = df
+d u
+u
+x = f′( u) = f′( x - 2 y
+2 ),
+z
+y = df
+d u
+u
+y = - 4 yf′( u) = - 4 yf′( x - 2 y
+2 ).
+例5 设u = f( x, xy, xyz), f 可微,求
+u
+x,
+u
+y,
+u
+z.
+解 设p = x, q = xy, r = xyz,则u = f( p, q, r),
+u
+x = fp + yfq + yzfr,
+u
+y = xfq + xzfr,
+u
+z = xyfr.
+例6 设z = f( x, y, u) = xy + xF( u),其中F( u)可微,且u = y
+x ,试证:
+x
+z
+x + y
+z
+y = z + xy.
+证 
+z
+x =
+f
+x +
+f
+u
+u
+x = y + F( u) + xF′( u)
+- y
+x
+2
+= y + F( u) - y
+x F′( u),
+  
+z
+y =
+f
+y +
+f
+u
+u
+y = x + xF′( u) 1
+x = x + F′( u),
+故
+x
+z
+x + y
+z
+y = x
+y + F( u) - y
+x F′( u)
++ y[ x + F′( u)]
+= xy + xF( u) + xy = z + xy.
+例7 设u = f( x, y)的偏导数表达式为
+u
+x
+2
++
+u
+y
+2
+,求出它在极坐标
+系下的表达式.
+解 直角坐标和极坐标的关系是
+x = rcos θ,
+y = rsin θ.
+将u 看成是中间变量x, y 的函数,而x, y 又是自变量r,θ的函数, 按链式法
+则,有
+·
+0
+3
+·
+微积分(下)
+
+u
+r =
+u
+x
+x
+r +
+u
+y
+y
+r = cos θ
+u
+x + sin θ
+u
+y,
+u
+θ=
+u
+x
+x
+θ+
+u
+y
+y
+θ= - rsin θ u
+x + rcos θ
+u
+y.
+由克拉默法则得:
+u
+x = cos θ
+u
+r - 1
+rsin θ u
+θ,
+u
+y = sin θ
+u
+r + 1
+rcos θ u
+θ.
+由此得出
+u
+x
+2
++
+u
+y
+2
+=
+u
+r
+2
++ 1
+r
+2
+u
+θ
+2
+.
+读者不妨将u 看成是中间变量r,θ的函数,而r,θ是自变量x, y 的函数,
+重新推导上例.
+二、一阶全微分形式的不变性
+与一元函数的一阶微分形式不变性类似,在多元函数中也有相同的性质.
+设z = f( x, y)是二元可微函数,如果x, y 都是自变量,那么
+d z =
+z
+xd x +
+z
+ydy.
+如果x, y 不是自变量而是中间变量x = x( u, v), y = y( u, v),又x, y 都
+可微,且由f, x, y 构成复合函数,那么
+d z =
+z
+ud u +
+z
+vd v,
+而
+z
+u =
+z
+x
+x
+u +
+z
+y
+y
+u,
+z
+v =
+z
+x
+x
+v +
+z
+y
+y
+v,
+代入上式,得
+dz =
+z
+x
+x
+ud u +
+x
+vd v
++
+z
+y
+y
+ud u +
+y
+vd v
+=
+z
+xd x +
+z
+yd y.
+其中x, y 都是中间变量,它们都是u, v 的函数.由此可见,不论x, y 是自变量
+还是中间变量,都有
+d z =
+z
+xd x +
+z
+yd y
+·
+1
+3
+·
