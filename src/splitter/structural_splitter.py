@@ -1,119 +1,239 @@
+﻿"""
+MathRAG 文档结构切分器
+功能：
+1. 智能识别章、节、小节标题
+2. 按标题层级切分全文
+3. 保存为父块和子块
+4. 生成 metadata.jsonl
 """
-MathRAG 结构化切分器
-功能：按章节标题将教材切成独立的知识块（Chunks）
-"""
-import os
+
+import json
 import re
 from pathlib import Path
+from typing import List, Dict, Any
 
-def smart_split_by_titles(text: str) -> list:
-    """
-    按章节标题切分文本（支持多种标题格式）
-    """
-    # 定义常见标题模式
-    patterns = [
-        r'第[一二三四五六七八九十]+章\s*[^\n]+',      # "第一章 函数与极限"
-        r'\d+\.\d+\s*[^\n]+',                        # "1.1 导数概念"
-        r'§\s*\d+\.\d+\s*[^\n]+',                   # "§1.1 导数概念"
-        r'（[一二三四五六七八九十]+）\s*[^\n]+',     # "（一）函数的概念"
-    ]
+# 中文教材常见标题模式
+CHAPTER_PATTERN = re.compile(
+    r'^\s*第[一二三四五六七八九十百千万\d]+章\s*[^\n]{0,50}',
+    re.MULTILINE
+)
+SECTION_PATTERN = re.compile(
+    r'^\s*[一二三四五六七八九十百千万\d]+[、.．]\s*[^\n]{0,50}',
+    re.MULTILINE
+)
+SUBSECTION_PATTERN = re.compile(
+    r'^\s*[（(][一二三四五六七八九十\d]+[）)]\s*[^\n]{0,50}',
+    re.MULTILINE
+)
+UNIT_PATTERN = re.compile(
+    r'^\s*(定义|定理|性质|公式|例题|例|证明|推论|命题|公理|引理|注|注意|习题|练习)\s*[^\n]{0,50}',
+    re.MULTILINE
+)
 
-    combined_pattern = '|'.join(patterns)
-    # 使用原始字符串避免转义警告
-    raw_chunks = re.split(r'(\n\s*)({})'.format(combined_pattern), text)
+
+def normalize_text(text: str) -> str:
+    """标准化文本（换行、空白）"""
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
+    """
+    根据标题层级切分全文，返回 chunks 列表。
+    每个 chunk 包含：title, level, content, start_pos, end_pos
+    """
+    text = normalize_text(full_text)
+    lines = text.splitlines()
 
     chunks = []
-    current_title = "开头"
-    current_content = []
+    current_chunk = None
 
-    for part in raw_chunks:
-        if re.search(combined_pattern, part):
-            if current_content:
-                chunks.append({
-                    "title": current_title,
-                    "content": "".join(current_content).strip()
-                })
-                current_content = []
-            current_title = part.strip()
+    # 定义标题匹配函数
+    def get_title_level(line: str) -> tuple:
+        """返回 (匹配级别, 标题文本)，级别 0=章, 1=节, 2=小节, 3=单元, -1=无"""
+        line = line.strip()
+        if CHAPTER_PATTERN.match(line):
+            return (0, line)
+        if SECTION_PATTERN.match(line):
+            return (1, line)
+        if SUBSECTION_PATTERN.match(line):
+            return (2, line)
+        if UNIT_PATTERN.match(line):
+            return (3, line)
+        return (-1, None)
+
+    for line in lines:
+        level, title = get_title_level(line)
+        if level >= 0:
+            # 新标题开始，保存上一个chunk
+            if current_chunk:
+                chunks.append(current_chunk)
+            current_chunk = {
+                'title': title,
+                'level': level,
+                'content': '',
+                'start_line': lines.index(line)  # 简化，实际可用索引
+            }
         else:
-            if part.strip():
-                current_content.append(part)
+            # 普通内容行
+            if current_chunk:
+                current_chunk['content'] += line + '\n'
+            else:
+                # 还没有标题，全部归入"前言"
+                if not chunks or chunks[-1]['title'] != '前言':
+                    current_chunk = {
+                        'title': '前言',
+                        'level': -1,
+                        'content': '',
+                        'start_line': 0
+                    }
+                current_chunk['content'] += line + '\n'
 
-    if current_content:
-        chunks.append({
-            "title": current_title,
-            "content": "".join(current_content).strip()
-        })
+    # 保存最后一个
+    if current_chunk:
+        chunks.append(current_chunk)
 
-    # 如果没切出东西，按段落切
-    if len(chunks) <= 1:
-        paragraphs = text.split('\n\n')
-        for p in paragraphs:
-            if p.strip():
-                chunks.append({
-                    "title": "正文段落",
-                    "content": p.strip()
-                })
+    # 清理内容首尾空行
+    for chunk in chunks:
+        chunk['content'] = chunk['content'].strip()
 
     return chunks
 
 
-def save_chunks_to_files(chunks: list, output_dir: str = "data/chunks"):
-    """保存知识块到独立文件"""
-    os.makedirs(output_dir, exist_ok=True)
+def save_chunks_to_files(chunks: List[Dict[str, Any]], output_dir: str = "data/chunks"):
+    """
+    将切分结果保存为文件，并生成 metadata.jsonl
+    """
+    output_path = Path(output_dir)
+    parent_dir = output_path / "parents"
+    child_dir = output_path / "children"
+    parent_dir.mkdir(parents=True, exist_ok=True)
+    child_dir.mkdir(parents=True, exist_ok=True)
 
-    for i, chunk in enumerate(chunks):
-        # 清理标题中的非法字符
-        raw_title = chunk['title']
-        # 换行替换为空格
-        clean_title = raw_title.replace('\n', ' ').replace('\r', '')
-        # 过滤非法文件名字符
-        for ch in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
-            clean_title = clean_title.replace(ch, '_')
-        # 截取前30个字符
-        safe_title = clean_title[:30].strip()
-        if not safe_title:
-            safe_title = f"chunk_{i+1:04d}"
+    metadata_path = output_path / "metadata.jsonl"
 
-        filename = f"chunk_{i+1:04d}_{safe_title}.txt"
-        filepath = os.path.join(output_dir, filename)
+    # 保存父块（按章/节）
+    parent_id = 0
+    child_id = 0
 
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(f"标题: {chunk['title']}\n")
-            f.write("=" * 50 + "\n\n")
-            f.write(chunk['content'])
+    with metadata_path.open('w', encoding='utf-8') as meta_file:
+        for chunk in chunks:
+            # 生成父块
+            parent_id += 1
+            parent = {
+                'id': f'parent_{parent_id:04d}',
+                'title': chunk['title'],
+                'level': chunk['level'],
+                'content': chunk['content'],
+                'start_line': chunk.get('start_line', 0),
+            }
+            parent_file = parent_dir / f"{parent['id']}_{parent['title'][:30]}.txt"
+            parent_file.write_text(parent['content'], encoding='utf-8')
 
-    print(f"✅ 切分完成！共生成 {len(chunks)} 个知识块")
-    print(f"📁 保存在: {output_dir}/")
-    return chunks
+            # 记录父块元数据
+            meta_file.write(json.dumps({
+                'id': parent['id'],
+                'level': 'parent',
+                'title': parent['title'],
+                'file': str(parent_file.relative_to(output_path.parent)),
+                'char_count': len(parent['content'])
+            }, ensure_ascii=False) + '\n')
+
+            # 对父块内容进行子块切分（按单元）
+            unit_matches = list(UNIT_PATTERN.finditer(parent['content']))
+            if unit_matches:
+                # 提取单元
+                for i, match in enumerate(unit_matches):
+                    unit_title = match.group(0).strip()
+                    start = match.end()
+                    end = unit_matches[i + 1].start() if i + 1 < len(unit_matches) else len(parent['content'])
+                    unit_content = parent['content'][start:end].strip()
+                    if unit_content:
+                        child_id += 1
+                        child = {
+                            'id': f'child_{child_id:04d}',
+                            'parent_id': parent['id'],
+                            'title': unit_title,
+                            'content': unit_content,
+                            'type': classify_unit(unit_title)
+                        }
+                        child_file = child_dir / f"{child['id']}_{child['title'][:30]}.txt"
+                        child_file.write_text(child['content'], encoding='utf-8')
+
+                        meta_file.write(json.dumps({
+                            'id': child['id'],
+                            'level': 'child',
+                            'parent_id': child['parent_id'],
+                            'title': child['title'],
+                            'type': child['type'],
+                            'file': str(child_file.relative_to(output_path.parent)),
+                            'char_count': len(child['content'])
+                        }, ensure_ascii=False) + '\n')
+            else:
+                # 没有单元，整个父块作为一个子块
+                child_id += 1
+                child = {
+                    'id': f'child_{child_id:04d}',
+                    'parent_id': parent['id'],
+                    'title': parent['title'],
+                    'content': parent['content'],
+                    'type': 'text'
+                }
+                child_file = child_dir / f"{child['id']}_{child['title'][:30]}.txt"
+                child_file.write_text(child['content'], encoding='utf-8')
+
+                meta_file.write(json.dumps({
+                    'id': child['id'],
+                    'level': 'child',
+                    'parent_id': child['parent_id'],
+                    'title': child['title'],
+                    'type': child['type'],
+                    'file': str(child_file.relative_to(output_path.parent)),
+                    'char_count': len(child['content'])
+                }, ensure_ascii=False) + '\n')
+
+    print(f"切分完成：父块 {parent_id} 个，子块 {child_id} 个")
+    print(f"输出目录：{output_path}")
 
 
+def classify_unit(title: str) -> str:
+    """根据标题判断单元类型"""
+    mapping = {
+        "定义": "definition",
+        "定理": "theorem",
+        "性质": "property",
+        "公式": "formula",
+        "例题": "example",
+        "例": "example",
+        "证明": "proof",
+        "推论": "corollary",
+        "命题": "proposition",
+        "公理": "axiom",
+        "引理": "lemma",
+        "注": "note",
+        "注意": "note",
+        "习题": "exercise",
+        "练习": "exercise",
+    }
+    for key, value in mapping.items():
+        if title.startswith(key):
+            return value
+    return "text"
+
+
+# 快速测试（可选）
 if __name__ == "__main__":
-    # 自动定位项目根目录
-    current_file = Path(__file__).resolve()
-    project_root = current_file.parent.parent
-    while not (project_root / "data").exists():
-        if project_root.parent == project_root:
-            raise RuntimeError("找不到项目根目录（包含 data 文件夹）")
-        project_root = project_root.parent
-    os.chdir(project_root)
-    print(f"✅ 当前工作目录: {os.getcwd()}")
-
-    input_file = "data/processed/full_text.txt"
-    if not os.path.exists(input_file):
-        print(f"❌ 找不到文件: {input_file}")
-        exit(1)
-
-    with open(input_file, "r", encoding="utf-8") as f:
-        full_text = f.read()
-
-    print(f"📖 原文总字符数: {len(full_text)}")
-
-    chunks = smart_split_by_titles(full_text)
-    save_chunks_to_files(chunks)
-
-    print(f"\n📊 统计:")
-    print(f"   - 总块数: {len(chunks)}")
-    print(f"   - 平均字数: {sum(len(c['content']) for c in chunks) // len(chunks)}")
-    print(f"   - 最大块: {max(len(c['content']) for c in chunks)}")
-    print(f"   - 最小块: {min(len(c['content']) for c in chunks)}")
+    # 读取 full_text.txt 测试
+    test_file = Path("data/processed/full_text.txt")
+    if test_file.exists():
+        text = test_file.read_text(encoding="utf-8")
+        chunks = smart_split_by_titles(text)
+        print(f"共切分出 {len(chunks)} 个块")
+        for i, chunk in enumerate(chunks[:5]):
+            print(f"{i + 1}. {chunk['title']} ({chunk['level']}) - {len(chunk['content'])} 字符")
+        # 保存
+        save_chunks_to_files(chunks)
+    else:
+        print("请先运行 PDF 提取生成 data/processed/full_text.txt")

@@ -1,113 +1,216 @@
 """
 MathRAG 向量索引构建器
-功能：读取切分好的Chunks，用BGE模型转成向量，存入FAISS索引
+
+功能：
+1. 读取 child chunks
+2. 使用 BGE 模型生成向量
+3. 构建 FAISS 索引
+4. 保存索引和 metadata
 """
 import os
-import pickle
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+import json
+import warnings
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Dict, Tuple
 
-# 向量相关
-from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
+from sentence_transformers import SentenceTransformer
 
-def load_chunks_from_folder(chunk_dir: str = "data/chunks") -> Tuple[List[str], List[str]]:
-    """
-    读取所有chunk文件，返回内容列表和标题列表
-    """
-    if not os.path.exists(chunk_dir):
-        raise FileNotFoundError(f"❌ chunk目录不存在: {chunk_dir}")
 
-    chunk_files = [f for f in os.listdir(chunk_dir) if f.endswith('.txt')]
+def find_project_root() -> Path:
+    """向上查找包含 data 文件夹的项目根目录"""
+    current = Path(__file__).resolve().parent
+    while not (current / "data").exists():
+        if current.parent == current:
+            raise RuntimeError("找不到项目根目录：需要包含 data 文件夹")
+        current = current.parent
+    return current
+
+
+def load_metadata(metadata_path: Path) -> Dict[str, dict]:
+    """读取 metadata.jsonl，按 id 建立索引"""
+    if not metadata_path.exists():
+        return {}
+    metadata = {}
+    with metadata_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                item = json.loads(line)
+                metadata[item["id"]] = item
+    return metadata
+
+
+def extract_content_from_chunk_file(file_path: Path) -> str:
+    """
+    从 chunk txt 中提取正文。
+    跳过头部信息，保留分隔线后的内容。
+    """
+    text = file_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    content_lines = []
+    found_separator = False
+    for line in lines:
+        if not found_separator:
+            # 分隔线可能是多个等号
+            if line.strip().startswith("=="):
+                found_separator = True
+            continue
+        content_lines.append(line)
+    content = "\n".join(content_lines).strip()
+    return content if content else text.strip()
+
+
+def load_chunks_from_folder(
+    chunk_dir: str = "data/chunks/children",
+    metadata_path: str = "data/chunks/metadata.jsonl",
+) -> Tuple[List[str], List[dict]]:
+    """
+    读取 child chunks，返回文本列表和 metadata 列表。
+    """
+    chunk_path = Path(chunk_dir)
+    if not chunk_path.exists():
+        raise FileNotFoundError(f"chunk 目录不存在: {chunk_dir}，请先运行切分脚本生成 chunks。")
+
+    chunk_files = sorted(chunk_path.glob("*.txt"))
     if not chunk_files:
-        raise FileNotFoundError(f"❌ 在 {chunk_dir} 中没有找到任何 .txt 文件")
+        raise FileNotFoundError(f"在 {chunk_path} 中没有找到任何 .txt 文件")
 
-    contents = []
-    titles = []
+    metadata_map = load_metadata(Path(metadata_path))
 
-    for fname in sorted(chunk_files):
-        fpath = os.path.join(chunk_dir, fname)
-        with open(fpath, "r", encoding="utf-8") as f:
-            text = f.read()
-            # 去掉开头的"标题: xxx"元信息行，只保留正文
-            lines = text.split('\n')
-            # 跳过第一行（标题）和分隔线
-            content_lines = []
-            skip_until_separator = True
-            for line in lines:
-                if skip_until_separator:
-                    if line.startswith('='):
-                        skip_until_separator = False
-                    continue
-                content_lines.append(line)
-            content = '\n'.join(content_lines).strip()
-            if content:
-                contents.append(content)
-                titles.append(fname.replace('.txt', ''))
+    texts = []
+    metadatas = []
 
-    return contents, titles
+    for file_path in chunk_files:
+        # 从文件名提取 id，格式为 child_xxxx_...
+        stem = file_path.stem
+        parts = stem.split("_")
+        if len(parts) < 2 or parts[0] != "child":
+            warnings.warn(f"跳过非 child chunk 文件: {file_path.name}")
+            continue
+        chunk_id = f"{parts[0]}_{parts[1]}"  # 例如 child_0001
+
+        content = extract_content_from_chunk_file(file_path)
+        if not content:
+            warnings.warn(f"文件内容为空，跳过: {file_path}")
+            continue
+
+        # 获取元数据，若缺失则构建默认值
+        meta = metadata_map.get(chunk_id, {})
+        if not meta:
+            warnings.warn(f"未在 metadata.jsonl 中找到 id={chunk_id}，使用默认元数据")
+            meta = {
+                "id": chunk_id,
+                "title": stem.replace("_", " "),
+                "chapter": "",
+                "section": "",
+                "chunk_type": "text",
+            }
+
+        meta.update({
+            "file": str(file_path).replace("\\", "/"),
+            "char_count": len(content),
+        })
+
+        texts.append(content)
+        metadatas.append(meta)
+
+    if not texts:
+        raise ValueError("没有读取到有效 chunk 内容，请检查 chunk 目录和 metadata 文件。")
+
+    return texts, metadatas
 
 
 def build_vector_index(
-    chunk_dir: str = "data/chunks",
+    chunk_dir: str = "data/chunks/children",
+    metadata_path: str = "data/chunks/metadata.jsonl",
     model_name: str = "BAAI/bge-small-zh-v1.5",
-    index_path: str = "data/faiss_index",
-    meta_path: str = "data/chunks_meta.pkl"
+    index_path: str = "data/faiss_index/index.faiss",
+    output_meta_path: str = "data/faiss_index/chunks_meta.jsonl",
+    batch_size: int = 32,
 ):
     """
-    构建完整的向量索引
+    构建 FAISS 向量索引。
     """
-    print("🚀 开始构建向量索引...")
+    print("开始构建向量索引")
+    print(f"读取 chunks: {chunk_dir}")
+    texts, metadatas = load_chunks_from_folder(chunk_dir, metadata_path)
+    print(f"共加载 {len(texts)} 个知识块")
 
-    # 1. 加载所有chunk
-    print(f"📂 正在读取: {chunk_dir}")
-    contents, titles = load_chunks_from_folder(chunk_dir)
-    print(f"📄 共加载 {len(contents)} 个知识块")
+    print(f"加载模型: {model_name}")
+    try:
+        model = SentenceTransformer(model_name)
+    except Exception as e:
+        raise RuntimeError(f"模型加载失败，请检查网络或安装 sentence-transformers: {e}")
+    print("模型加载完成")
 
-    # 2. 加载嵌入模型
-    print(f"🤖 正在加载模型: {model_name}")
-    model = SentenceTransformer(model_name)
-    print("✅ 模型加载完成")
+    print("正在向量化...")
+    embeddings = model.encode(
+        texts,
+        batch_size=batch_size,
+        show_progress_bar=True,
+        normalize_embeddings=True,
+    )
+    embeddings = np.asarray(embeddings, dtype="float32")
+    print(f"向量化完成，shape: {embeddings.shape}")
 
-    # 3. 向量化所有内容
-    print("⚡ 正在向量化（可能需要几分钟）...")
-    embeddings = model.encode(contents, show_progress_bar=True)
-    print(f"✅ 向量化完成，维度: {embeddings.shape}")
-
-    # 4. 构建FAISS索引
-    print("📦 正在构建FAISS索引...")
     dimension = embeddings.shape[1]
-    index = faiss.IndexFlatIP(dimension)  # 内积相似度
-    # 归一化向量，使内积等价于余弦相似度
-    faiss.normalize_L2(embeddings)
-    index.add(embeddings)
-    print(f"✅ FAISS索引构建完成，共 {index.ntotal} 个向量")
+    base_index = faiss.IndexFlatIP(dimension)
+    index = faiss.IndexIDMap(base_index)
 
-    # 5. 保存索引和元数据
-    os.makedirs(os.path.dirname(index_path), exist_ok=True)
-    faiss.write_index(index, index_path)
-    print(f"✅ 索引已保存: {index_path}")
+    ids = np.arange(len(texts), dtype="int64")
+    index.add_with_ids(embeddings, ids)
 
-    # 保存元数据（标题和内容）
-    with open(meta_path, "wb") as f:
-        pickle.dump({"titles": titles, "contents": contents}, f)
-    print(f"✅ 元数据已保存: {meta_path}")
+    print(f"FAISS 索引构建完成，共 {index.ntotal} 个向量")
 
-    return index, embeddings, titles, contents
+    # 保存索引和元数据
+    index_path = Path(index_path)
+    output_meta_path = Path(output_meta_path)
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    output_meta_path.parent.mkdir(parents=True, exist_ok=True)
+
+    faiss.write_index(index, str(index_path))
+
+    with output_meta_path.open("w", encoding="utf-8") as f:
+        for vector_id, (text, meta) in enumerate(zip(texts, metadatas)):
+            record = {
+                "vector_id": vector_id,
+                "text": text,
+                **meta,
+            }
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    # 保存配置
+    config_path = index_path.parent / "index_config.json"
+    config = {
+        "model_name": model_name,
+        "dimension": dimension,
+        "index_type": "IndexFlatIP + normalized embeddings",
+        "chunk_count": len(texts),
+        "index_path": str(index_path).replace("\\", "/"),
+        "metadata_path": str(output_meta_path).replace("\\", "/"),
+    }
+    config_path.write_text(
+        json.dumps(config, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    print(f"索引已保存: {index_path}")
+    print(f"元数据已保存: {output_meta_path}")
+    print(f"配置已保存: {config_path}")
+
+    return index, texts, metadatas
 
 
-# ---------- 运行入口 ----------
 if __name__ == "__main__":
-    # 自动定位项目根目录
-    current_file = Path(__file__).resolve()
-    project_root = current_file.parent.parent
-    while not (project_root / "data").exists():
-        if project_root.parent == project_root:
-            raise RuntimeError("找不到项目根目录（包含 data 文件夹）")
-        project_root = project_root.parent
-    os.chdir(project_root)
-    print(f"✅ 当前工作目录: {os.getcwd()}")
-
-    # 构建索引
-    build_vector_index()
+    try:
+        project_root = find_project_root()
+        os.chdir(project_root)
+        print(f"当前工作目录: {os.getcwd()}")
+        build_vector_index()
+    except Exception as e:
+        print(f"\n!!! 构建失败: {e}")
+        import traceback
+        traceback.print_exc()
+        exit(1)

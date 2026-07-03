@@ -1,19 +1,10 @@
 """
 MathRAG LLM 生成器
 功能：调用 DeepSeek API，根据检索到的上下文生成答案
-兼容本地运行（.env）和 Streamlit Cloud（st.secrets）
 """
 import os
-import sys
 from pathlib import Path
 from typing import List, Tuple
-
-# 尝试导入 streamlit（云端会有，本地可能没有）
-try:
-    import streamlit as st
-except ImportError:
-    st = None
-
 from openai import OpenAI
 
 
@@ -21,21 +12,12 @@ class LLMGenerator:
     """大模型生成器"""
 
     def __init__(self):
-        self.api_key = None
-        self.base_url = "https://api.deepseek.com/v1"
+        # 直接从环境变量读取（app.py 已经设置好了）
+        self.api_key = os.environ.get("DEEPSEEK_API_KEY")
+        self.base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 
-        # ---------- 方式1：从 Streamlit Cloud Secrets 读取 ----------
-        if st is not None:
-            try:
-                self.api_key = st.secrets.get("DEEPSEEK_API_KEY")
-                self.base_url = st.secrets.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-                if self.api_key:
-                    print("✅ 从 Streamlit Secrets 读取 API Key 成功")
-            except Exception:
-                pass
-
-        # ---------- 方式2：从 .env 文件读取（本地运行） ----------
         if not self.api_key:
+            # 如果环境变量没有，尝试从 .env 加载（兼容直接运行测试）
             try:
                 from dotenv import load_dotenv
                 env_path = Path(__file__).parent.parent.parent / ".env"
@@ -43,26 +25,20 @@ class LLMGenerator:
                     load_dotenv(env_path)
                     self.api_key = os.getenv("DEEPSEEK_API_KEY")
                     self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-                    if self.api_key:
-                        print(f"✅ 从 .env 文件读取 API Key 成功: {env_path}")
-            except Exception as e:
-                print(f"⚠️ 加载 .env 文件失败: {e}")
+            except Exception:
+                pass
 
-        # ---------- 检查是否获取到 API Key ----------
         if not self.api_key:
             raise ValueError(
                 "❌ 未找到 DEEPSEEK_API_KEY！\n"
-                "   - 本地运行：请在项目根目录创建 .env 文件，并写入 DEEPSEEK_API_KEY=sk-xxx\n"
-                "   - 云端部署：请在 Streamlit Cloud 的 Secrets 中配置 DEEPSEEK_API_KEY"
+                "请在运行前设置环境变量或在 .env 文件中配置。"
             )
 
-        # ---------- 初始化 OpenAI 客户端 ----------
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url
         )
 
-        # 高等数学专用 System Prompt（使用原始字符串 r"""...""" 避免反斜杠转义问题）
         self.system_prompt = r"""你是一位高等数学助教。请根据提供的教材内容，准确回答学生的问题。
 
 规则：
@@ -90,7 +66,6 @@ class LLMGenerator:
         for i, (content, score) in enumerate(contexts, 1):
             context_text += f"\n【参考片段 {i}】\n{content}\n"
 
-        # 构造用户消息
         user_message = f"""学生问题：{query}
 
 以下是从教材中检索到的相关内容：
@@ -98,7 +73,6 @@ class LLMGenerator:
 
 请根据以上教材内容，回答学生的问题。"""
 
-        # 调用 API
         try:
             response = self.client.chat.completions.create(
                 model="deepseek-chat",
