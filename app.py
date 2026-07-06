@@ -70,6 +70,8 @@ from src.pipeline.qa_pipeline import MathRAGPipeline
 # ============== 辅助函数：安全获取内容和分数 ==============
 def get_chunk_content_score(chunk):
     """统一处理各种格式，返回 (content, score)"""
+    if isinstance(chunk, dict):
+        return chunk.get("content", ""), chunk.get("score", 0.0)
     if hasattr(chunk, 'content') and hasattr(chunk, 'rerank_score'):
         return chunk.content, chunk.rerank_score
     elif isinstance(chunk, (list, tuple)) and len(chunk) >= 2:
@@ -85,6 +87,31 @@ def ensure_iterable(obj):
     if isinstance(obj, Iterable) and not isinstance(obj, (str, bytes)):
         return list(obj)
     return [obj]
+
+
+def format_source_label(chunk, index):
+    """格式化引用来源标题"""
+    if not isinstance(chunk, dict):
+        content, score = get_chunk_content_score(chunk)
+        return f"片段 {index} (相关性: {score:.4f})"
+
+    title = chunk.get("title") or "未知标题"
+    chapter = chunk.get("chapter") or ""
+    section = chunk.get("section") or ""
+    chunk_type = chunk.get("chunk_type") or ""
+    score = chunk.get("score", 0.0)
+
+    parts = [f"片段 {index}"]
+    if chapter:
+        parts.append(chapter)
+    if section:
+        parts.append(section)
+    if title:
+        parts.append(title)
+    if chunk_type:
+        parts.append(chunk_type)
+
+    return " / ".join(parts) + f" / 相关性 {score:.4f}"
 
 
 # ============== 侧边栏 ==============
@@ -166,7 +193,7 @@ for message in st.session_state.messages:
                 contexts = ensure_iterable(message["contexts"])
                 for i, chunk in enumerate(contexts):
                     content, score = get_chunk_content_score(chunk)
-                    st.caption(f"片段 {i+1} (相关性: {score:.4f})")
+                    st.caption(format_source_label(chunk, i + 1))
                     st.text(content[:300] + "..." if len(content) > 300 else content)
 
 # ========== 输入框 ==========
@@ -190,15 +217,14 @@ if prompt := st.chat_input("输入你的高数问题..."):
                     contexts = ensure_iterable(result.get("contexts", []))
                     for i, chunk in enumerate(contexts):
                         content, score = get_chunk_content_score(chunk)
-                        st.caption(f"片段 {i+1} (相关性: {score:.4f})")
+                        st.caption(format_source_label(chunk, i + 1))
                         st.text(content[:300] + "..." if len(content) > 300 else content)
 
-                # 保存历史（强制转换为元组列表）
-                contexts_tuple = [get_chunk_content_score(chunk) for chunk in ensure_iterable(result.get("contexts", []))]
+                # 保存历史，保留检索来源 metadata
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": result["answer"],
-                    "contexts": contexts_tuple
+                    "contexts": ensure_iterable(result.get("contexts", []))
                 })
 
             except Exception as e:

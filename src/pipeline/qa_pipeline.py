@@ -32,14 +32,31 @@ class MathRAGPipeline:
             }
 
         print(f"   ✅ 检索到 {len(retrieved_chunks)} 个相关片段")
-        contexts_tuple = [(chunk.content, chunk.rerank_score) for chunk in retrieved_chunks]
+        contexts = [
+            {
+                "content": chunk.content,
+                "score": chunk.rerank_score,
+                "embedding_score": chunk.embedding_score,
+                "title": chunk.title,
+                "chapter": chunk.chapter,
+                "section": chunk.section,
+                "chunk_type": chunk.chunk_type,
+                "file": chunk.file,
+                "vector_id": chunk.vector_id,
+            }
+            for chunk in retrieved_chunks
+        ]
+        generator_contexts = [
+            (item["content"], item["score"])
+            for item in contexts
+        ]
 
         print("   🤖 正在生成答案...")
-        answer = self.generator.generate(query, contexts_tuple)
+        answer = self.generator.generate(query, generator_contexts)
 
         return {
             "query": query,
-            "contexts": contexts_tuple,
+            "contexts": contexts,
             "answer": answer
         }
 
