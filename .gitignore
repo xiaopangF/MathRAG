@@ -34,4 +34,4 @@ data/
 # system
 .DS_Store
 Thumbs.db
-'@ | Set-Content -Encoding UTF8 .gitignore
+'@ | Set-Content -Encoding UTF8 .gitignore.pytest_tmp/
