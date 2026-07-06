@@ -1,4 +1,4 @@
-﻿"""
+"""
 MathRAG Web 界面
 基于 Streamlit 的高等数学知识库问答系统
 """
@@ -63,7 +63,6 @@ else:
 # ============== 导入项目模块 ==============
 from src.loader.pdf_loader import PDFLoader
 from src.splitter.structural_splitter import smart_split_by_titles, save_chunks_to_files
-from src.retriever.retriever import MathRAGRetriever
 from src.pipeline.qa_pipeline import MathRAGPipeline
 
 
@@ -114,46 +113,70 @@ def format_source_label(chunk, index):
     return " / ".join(parts) + f" / 相关性 {score:.4f}"
 
 
+def has_local_knowledge_base():
+    """检查本地是否已有可直接使用的知识库。"""
+    index_path = Path("data/faiss_index/index.faiss")
+    meta_path = Path("data/faiss_index/chunks_meta.jsonl")
+    return index_path.exists(), meta_path.exists()
+
+
 # ============== 侧边栏 ==============
 with st.sidebar:
     st.title("📐 MathRAG")
     st.caption("基于双阶段检索的高等数学知识库问答系统")
     st.divider()
 
-    st.subheader("📊 系统状态")
-    index_exists = Path("data/faiss_index/index.faiss").exists()
-    meta_exists = Path("data/faiss_index/chunks_meta.jsonl").exists()
+    st.subheader("📊 知识库状态")
+    index_exists, meta_exists = has_local_knowledge_base()
+    knowledge_ready = index_exists and meta_exists
     txt_files = list(Path("data/chunks").rglob("*.txt")) if Path("data/chunks").exists() else []
 
     col1, col2, col3 = st.columns(3)
     col1.metric("📄 知识块", len(txt_files))
     col2.metric("🔍 索引", "✅" if index_exists else "❌")
     col3.metric("🧠 模型", "✅" if index_exists else "❌")
+
+    if knowledge_ready:
+        st.success("已检测到本地知识库，可直接开始问答。")
+    else:
+        st.warning("未检测到本地知识库。可在下方上传 PDF 构建。")
     st.divider()
 
-    st.subheader("📤 上传教材")
-    uploaded_file = st.file_uploader("上传 PDF 文件", type=["pdf"], help="上传后点击下方按钮构建知识库")
+    with st.expander("📤 更新或替换教材（可选）", expanded=not knowledge_ready):
+        uploaded_file = st.file_uploader("上传 PDF 文件", type=["pdf"], help="已有知识库时无需上传；上传后可重建本地知识库。")
 
-    if uploaded_file is not None:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            pdf_path = tmp_file.name
-        st.success(f"✅ 已上传: {uploaded_file.name}")
-        if st.button("🚀 构建知识库", type="primary", use_container_width=True):
-            with st.spinner("正在处理..."):
-                try:
-                    loader = PDFLoader(pdf_path)
-                    full_text = loader.extract_full_text()
-                    loader.close()
-                    chunks = smart_split_by_titles(full_text)
-                    save_chunks_to_files(chunks, "data/chunks")
-                    from src.retriever.vector_indexer import build_vector_index
-                    build_vector_index()
-                    st.success("🎉 构建完成！")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ 失败: {e}")
-        os.unlink(pdf_path)
+        if uploaded_file is not None:
+            st.success(f"✅ 已选择: {uploaded_file.name}")
+            if st.button("🚀 重建知识库", type="primary", use_container_width=True):
+                with st.spinner("正在处理 PDF、切分文本并重建索引..."):
+                    pdf_path = None
+                    try:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                            tmp_file.write(uploaded_file.getvalue())
+                            pdf_path = tmp_file.name
+
+                        st.info("正在提取 PDF 文本...")
+                        loader = PDFLoader(pdf_path)
+                        full_text = loader.extract_full_text()
+                        loader.close()
+
+                        st.info("正在结构化切分教材...")
+                        chunks = smart_split_by_titles(full_text)
+                        save_chunks_to_files(chunks, "data/chunks", clear_existing=True)
+
+                        st.info("正在构建向量索引...")
+                        from src.retriever.vector_indexer import build_vector_index
+                        build_vector_index()
+
+                        st.session_state.pipeline = None
+                        st.session_state.retriever_initialized = False
+                        st.success("🎉 知识库重建完成！")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ 失败: {e}")
+                    finally:
+                        if pdf_path and Path(pdf_path).exists():
+                            os.unlink(pdf_path)
 
     st.divider()
     st.caption("电子科技大学 · 人工智能专业 · 暑假项目")
@@ -181,7 +204,7 @@ if index_exists and meta_exists and not st.session_state.retriever_initialized:
         st.error(f"❌ 加载失败: {e}")
 
 if not index_exists or not meta_exists:
-    st.warning("⚠️ 未检测到知识库，请在左侧上传 PDF 并构建。")
+    st.warning("⚠️ 未检测到本地知识库。请在左侧“更新或替换教材（可选）”中上传 PDF 构建一次。")
     st.stop()
 
 # ========== 显示历史消息（带安全检查） ==========

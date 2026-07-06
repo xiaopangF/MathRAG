@@ -1,4 +1,4 @@
-﻿"""
+"""
 MathRAG 文档结构切分器
 功能：
 1. 智能识别章、节、小节标题
@@ -9,6 +9,7 @@ MathRAG 文档结构切分器
 
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -39,6 +40,14 @@ def normalize_text(text: str) -> str:
     return text.strip()
 
 
+def safe_filename_part(text: str, max_length: int = 40) -> str:
+    """将标题转换为可用于 Windows/macOS/Linux 的安全文件名片段。"""
+    text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.strip(". ")
+    return (text[:max_length] or "untitled")
+
+
 def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
     """
     根据标题层级切分全文，返回 chunks 列表。
@@ -64,7 +73,7 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
             return (3, line)
         return (-1, None)
 
-    for line in lines:
+    for line_no, line in enumerate(lines):
         level, title = get_title_level(line)
         if level >= 0:
             # 新标题开始，保存上一个chunk
@@ -74,7 +83,7 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
                 'title': title,
                 'level': level,
                 'content': '',
-                'start_line': lines.index(line)  # 简化，实际可用索引
+                'start_line': line_no
             }
         else:
             # 普通内容行
@@ -102,11 +111,18 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
     return chunks
 
 
-def save_chunks_to_files(chunks: List[Dict[str, Any]], output_dir: str = "data/chunks"):
+def save_chunks_to_files(
+    chunks: List[Dict[str, Any]],
+    output_dir: str = "data/chunks",
+    clear_existing: bool = True,
+):
     """
     将切分结果保存为文件，并生成 metadata.jsonl
     """
     output_path = Path(output_dir)
+    if clear_existing and output_path.exists():
+        shutil.rmtree(output_path)
+
     parent_dir = output_path / "parents"
     child_dir = output_path / "children"
     parent_dir.mkdir(parents=True, exist_ok=True)
@@ -129,7 +145,7 @@ def save_chunks_to_files(chunks: List[Dict[str, Any]], output_dir: str = "data/c
                 'content': chunk['content'],
                 'start_line': chunk.get('start_line', 0),
             }
-            parent_file = parent_dir / f"{parent['id']}_{parent['title'][:30]}.txt"
+            parent_file = parent_dir / f"{parent['id']}_{safe_filename_part(parent['title'])}.txt"
             parent_file.write_text(parent['content'], encoding='utf-8')
 
             # 记录父块元数据
@@ -159,7 +175,7 @@ def save_chunks_to_files(chunks: List[Dict[str, Any]], output_dir: str = "data/c
                             'content': unit_content,
                             'type': classify_unit(unit_title)
                         }
-                        child_file = child_dir / f"{child['id']}_{child['title'][:30]}.txt"
+                        child_file = child_dir / f"{child['id']}_{safe_filename_part(child['title'])}.txt"
                         child_file.write_text(child['content'], encoding='utf-8')
 
                         meta_file.write(json.dumps({
@@ -181,7 +197,7 @@ def save_chunks_to_files(chunks: List[Dict[str, Any]], output_dir: str = "data/c
                     'content': parent['content'],
                     'type': 'text'
                 }
-                child_file = child_dir / f"{child['id']}_{child['title'][:30]}.txt"
+                child_file = child_dir / f"{child['id']}_{safe_filename_part(child['title'])}.txt"
                 child_file.write_text(child['content'], encoding='utf-8')
 
                 meta_file.write(json.dumps({
