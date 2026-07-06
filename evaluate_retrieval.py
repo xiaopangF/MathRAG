@@ -8,6 +8,7 @@ question in a JSONL file, and reports Recall@K and MRR.
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -52,10 +53,21 @@ def get_expected_keywords(item: dict[str, Any]) -> list[str]:
     return [str(keyword) for keyword in expected if str(keyword).strip()]
 
 
+def normalize_for_match(text: str) -> str:
+    """Normalize OCR text for keyword matching."""
+    text = text.lower()
+    text = re.sub(r"[\s\-‐‑‒–—―_·•'\"“”‘’`´!！?？,，.。:：;；、/\\|()[\]{}<>《》【】（）]", "", text)
+    return text
+
+
 def is_hit(content: str, expected_keywords: list[str]) -> bool:
     """Return True when content contains any expected keyword."""
-    content_lower = content.lower()
-    return any(keyword.lower() in content_lower for keyword in expected_keywords)
+    normalized_content = normalize_for_match(content)
+    return any(
+        normalize_for_match(keyword) in normalized_content
+        for keyword in expected_keywords
+        if normalize_for_match(keyword)
+    )
 
 
 def evaluate_retrieval(
