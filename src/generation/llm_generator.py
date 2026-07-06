@@ -4,7 +4,7 @@ MathRAG LLM 生成器
 """
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any
 from openai import OpenAI
 
 
@@ -45,26 +45,81 @@ class LLMGenerator:
 1. 只使用提供的上下文来回答问题，不要编造教材中没有的内容。
 2. 如果上下文中没有相关信息，请直接说"根据当前教材内容，未找到相关解释"。
 3. 回答要清晰、有条理，用中文输出。
-4. 【公式渲染要求】对于数学公式，请严格使用 LaTeX 格式：
+4. 当答案中的结论来自某个参考片段时，请在句末用 [1]、[2] 这样的编号标注来源。
+5. 【公式渲染要求】对于数学公式，请严格使用 LaTeX 格式：
    - 块级公式（独立成行）：用 $$ ... $$ 包裹，例如：
      $$ \int_0^1 x^2 dx = \frac{1}{3} $$
    - 内联公式（在行内）：用 \( ... \) 包裹，例如：
      导数 \( f'(x) \) 表示函数在 \( x \) 点的变化率。
 """
 
-    def generate(self, query: str, contexts: List[Tuple[str, float]]) -> str:
+    @staticmethod
+    def _normalize_context(context: Any, index: int) -> dict:
+        """兼容旧 tuple 格式和新的结构化 context 格式。"""
+        if isinstance(context, dict):
+            return {
+                "index": index,
+                "content": context.get("content", ""),
+                "score": context.get("score", 0.0),
+                "title": context.get("title", ""),
+                "chapter": context.get("chapter", ""),
+                "section": context.get("section", ""),
+                "chunk_type": context.get("chunk_type", ""),
+            }
+
+        if isinstance(context, (list, tuple)) and len(context) >= 2:
+            return {
+                "index": index,
+                "content": context[0],
+                "score": context[1],
+                "title": "",
+                "chapter": "",
+                "section": "",
+                "chunk_type": "",
+            }
+
+        return {
+            "index": index,
+            "content": str(context),
+            "score": 0.0,
+            "title": "",
+            "chapter": "",
+            "section": "",
+            "chunk_type": "",
+        }
+
+    def generate(self, query: str, contexts: list[Any]) -> str:
         """
         基于检索到的上下文生成答案
         Args:
             query: 用户问题
-            contexts: [(content, score), ...] 检索到的知识块列表
+            contexts: 检索到的知识块列表，支持 dict 或 (content, score)
         Returns:
             str: 生成的答案
         """
-        # 拼接上下文
+        normalized_contexts = [
+            self._normalize_context(context, i)
+            for i, context in enumerate(contexts, 1)
+        ]
+
         context_text = ""
-        for i, (content, score) in enumerate(contexts, 1):
-            context_text += f"\n【参考片段 {i}】\n{content}\n"
+        for item in normalized_contexts:
+            metadata = []
+            if item["chapter"]:
+                metadata.append(f"章节: {item['chapter']}")
+            if item["section"]:
+                metadata.append(f"小节: {item['section']}")
+            if item["title"]:
+                metadata.append(f"标题: {item['title']}")
+            if item["chunk_type"]:
+                metadata.append(f"类型: {item['chunk_type']}")
+            metadata.append(f"相关性: {item['score']:.4f}")
+            metadata_text = "\n".join(metadata)
+            context_text += (
+                f"\n【参考片段 {item['index']}】\n"
+                f"{metadata_text}\n"
+                f"内容:\n{item['content']}\n"
+            )
 
         user_message = f"""学生问题：{query}
 

@@ -64,6 +64,4 @@ def test_pipeline_preserves_retrieval_source_metadata():
             "vector_id": 7,
         }
     ]
-    assert pipeline.generator.received_contexts == [
-        ("导数表示函数在某一点的变化率。", 0.91)
-    ]
+    assert pipeline.generator.received_contexts == result["contexts"]

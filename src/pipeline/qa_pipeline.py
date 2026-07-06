@@ -46,13 +46,8 @@ class MathRAGPipeline:
             }
             for chunk in retrieved_chunks
         ]
-        generator_contexts = [
-            (item["content"], item["score"])
-            for item in contexts
-        ]
-
         print("   🤖 正在生成答案...")
-        answer = self.generator.generate(query, generator_contexts)
+        answer = self.generator.generate(query, contexts)
 
         return {
             "query": query,
