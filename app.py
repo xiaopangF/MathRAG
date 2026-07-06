@@ -94,10 +94,8 @@ with st.sidebar:
     st.divider()
 
     st.subheader("📊 系统状态")
-    index_exists = Path("data/faiss_index/
-    index.faiss").exists()
-    meta_exists = Path("data/faiss_index/
-    chunks_meta.jsonl").exists()
+    index_exists = Path("data/faiss_index/index.faiss").exists()
+    meta_exists = Path("data/faiss_index/chunks_meta.jsonl").exists()
     txt_files = list(Path("data/chunks").rglob("*.txt")) if Path("data/chunks").exists() else []
 
     col1, col2, col3 = st.columns(3)
