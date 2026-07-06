@@ -1,38 +1,37 @@
+@'
+# environment
+.env
+.env.*
+!.env.example
+.venv/
+venv/
 
-  @'
-  # environment
-  .env
-  .env.*
-  !.env.example
-  .venv/
-  venv/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-  # Python
-  __pycache__/
-  *.py[cod]
-  *.pyo
-  .pytest_cache/
-  .mypy_cache/
-  .ruff_cache/
+# IDE
+.idea/
+.vscode/
 
-  # IDE
-  .idea/
-  .vscode/
+# local app config
+.streamlit/
 
-  # local app config
-  .streamlit/
+# data and generated files
+data/
+!data/.gitkeep
 
-  # data and generated files
-  data/
-  !data/.gitkeep
+# model / index artifacts
+*.faiss
+*.pkl
+*.npy
+*.npz
 
-  # model / index artifacts
-  *.faiss
-  *.pkl
-  *.npy
-  *.npz
-
-  # system
-  .DS_Store
-  Thumbs.db
-  '@ | Set-Content -Encoding UTF8 .gitignore
+# system
+.DS_Store
+Thumbs.db
+'@ | Set-Content -Encoding UTF8 .gitignore
