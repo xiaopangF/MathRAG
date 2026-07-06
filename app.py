@@ -120,6 +120,18 @@ def has_local_knowledge_base():
     return index_path.exists(), meta_path.exists()
 
 
+def show_model_loading_help(error):
+    """展示模型加载失败时的可操作提示。"""
+    st.error(f"❌ 失败: {error}")
+    st.info(
+        "这是 embedding/reranker 模型加载失败，不是 PDF 本身的问题。"
+        "如果已有本地知识库，可以不上传 PDF，直接问答；"
+        "如果需要重建知识库，请确保能访问 HuggingFace/镜像站，"
+        "或在 `.env` 中把 `MATHRAG_EMBEDDING_MODEL` 和 "
+        "`MATHRAG_RERANKER_MODEL` 配成本地模型目录。"
+    )
+
+
 # ============== 侧边栏 ==============
 with st.sidebar:
     st.title("📐 MathRAG")
@@ -173,7 +185,10 @@ with st.sidebar:
                         st.success("🎉 知识库重建完成！")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"❌ 失败: {e}")
+                        if "模型加载失败" in str(e) or "huggingface" in str(e).lower() or "hf-mirror" in str(e).lower():
+                            show_model_loading_help(e)
+                        else:
+                            st.error(f"❌ 失败: {e}")
                     finally:
                         if pdf_path and Path(pdf_path).exists():
                             os.unlink(pdf_path)
@@ -201,7 +216,10 @@ if index_exists and meta_exists and not st.session_state.retriever_initialized:
             st.session_state.retriever_initialized = True
             st.success("✅ 系统加载完成！")
     except Exception as e:
-        st.error(f"❌ 加载失败: {e}")
+        if "huggingface" in str(e).lower() or "hf-mirror" in str(e).lower():
+            show_model_loading_help(e)
+        else:
+            st.error(f"❌ 加载失败: {e}")
 
 if not index_exists or not meta_exists:
     st.warning("⚠️ 未检测到本地知识库。请在左侧“更新或替换教材（可选）”中上传 PDF 构建一次。")

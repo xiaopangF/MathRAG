@@ -8,7 +8,6 @@ MathRAG 向量索引构建器
 4. 保存索引和 metadata
 """
 import os
-os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 import json
 import warnings
 from pathlib import Path
@@ -17,6 +16,27 @@ from typing import List, Dict, Tuple
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
+
+
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-zh-v1.5"
+DEFAULT_HF_ENDPOINT = "https://hf-mirror.com"
+
+
+def configure_huggingface_endpoint() -> str:
+    """Configure HuggingFace endpoint without overriding user settings."""
+    endpoint = os.getenv("HF_ENDPOINT", DEFAULT_HF_ENDPOINT)
+    os.environ.setdefault("HF_ENDPOINT", endpoint)
+    return endpoint
+
+
+def resolve_embedding_model(model_name: str | None = None) -> str:
+    """Resolve embedding model from argument or environment."""
+    return (
+        model_name
+        or os.getenv("MATHRAG_EMBEDDING_MODEL")
+        or os.getenv("EMBEDDING_MODEL")
+        or DEFAULT_EMBEDDING_MODEL
+    )
 
 
 def find_project_root() -> Path:
@@ -125,7 +145,7 @@ def load_chunks_from_folder(
 def build_vector_index(
     chunk_dir: str = "data/chunks/children",
     metadata_path: str = "data/chunks/metadata.jsonl",
-    model_name: str = "BAAI/bge-small-zh-v1.5",
+    model_name: str | None = None,
     index_path: str = "data/faiss_index/index.faiss",
     output_meta_path: str = "data/faiss_index/chunks_meta.jsonl",
     batch_size: int = 32,
@@ -138,11 +158,19 @@ def build_vector_index(
     texts, metadatas = load_chunks_from_folder(chunk_dir, metadata_path)
     print(f"共加载 {len(texts)} 个知识块")
 
+    model_name = resolve_embedding_model(model_name)
+    hf_endpoint = configure_huggingface_endpoint()
     print(f"加载模型: {model_name}")
+    print(f"HuggingFace Endpoint: {hf_endpoint}")
     try:
         model = SentenceTransformer(model_name)
     except Exception as e:
-        raise RuntimeError(f"模型加载失败，请检查网络或安装 sentence-transformers: {e}")
+        raise RuntimeError(
+            "模型加载失败。请检查网络，或在 .env 中配置本地模型路径，例如：\n"
+            "MATHRAG_EMBEDDING_MODEL=C:/models/bge-small-zh-v1.5\n"
+            "也可以设置 HF_ENDPOINT=https://huggingface.co 或可用镜像。\n"
+            f"原始错误: {e}"
+        ) from e
     print("模型加载完成")
 
     print("正在向量化...")

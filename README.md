@@ -86,6 +86,16 @@ pip install -r requirements.txt
 ```env
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+HF_ENDPOINT=https://hf-mirror.com
+MATHRAG_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+MATHRAG_RERANKER_MODEL=BAAI/bge-reranker-base
+```
+
+如果当前网络无法访问 HuggingFace 或镜像站，可以先把模型下载到本地，然后把模型变量改成本地路径：
+
+```env
+MATHRAG_EMBEDDING_MODEL=C:/models/bge-small-zh-v1.5
+MATHRAG_RERANKER_MODEL=C:/models/bge-reranker-base
 ```
 
 ### 4. 启动应用

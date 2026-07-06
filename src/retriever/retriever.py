@@ -13,8 +13,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
+DEFAULT_HF_ENDPOINT = "https://hf-mirror.com"
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-zh-v1.5"
+DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-base"
+
 # 设置 HuggingFace 镜像（仅当环境变量未设置时）
-os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+os.environ.setdefault("HF_ENDPOINT", os.getenv("HF_ENDPOINT", DEFAULT_HF_ENDPOINT))
 
 import faiss
 import numpy as np
@@ -24,8 +28,12 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 # ============ 配置类 ============
 @dataclass
 class RAGConfig:
-    embedding_model: str = "BAAI/bge-small-zh-v1.5"
-    reranker_model: str = "BAAI/bge-reranker-base"
+    embedding_model: str = field(
+        default_factory=lambda: os.getenv("MATHRAG_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    )
+    reranker_model: str = field(
+        default_factory=lambda: os.getenv("MATHRAG_RERANKER_MODEL", DEFAULT_RERANKER_MODEL)
+    )
     faiss_index_dir: str = "data/faiss_index"
     index_filename: str = "index.faiss"
     metadata_filename: str = "chunks_meta.jsonl"
