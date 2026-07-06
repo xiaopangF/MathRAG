@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 
 # 把项目根目录加到 Python 路径
-project_root = Path(__file__).parent
+project_root = Path(__file__).resolve().parent
 sys.path.insert(0, str(project_root))
 os.chdir(project_root)
 
@@ -23,10 +23,10 @@ st.set_page_config(
 )
 
 
-# ============== 读取 API Key（只从 .env 和环境变量） ==============
+# ============== 读取 API Key（从 .env、环境变量或页面临时输入） ==============
 
 def get_deepseek_key():
-    """获取 DeepSeek API Key，只从 .env 和环境变量读取"""
+    """获取 DeepSeek API Key，不在缺失时阻断页面渲染。"""
     try:
         from dotenv import load_dotenv
         env_path = project_root / ".env"
@@ -34,31 +34,20 @@ def get_deepseek_key():
             load_dotenv(env_path)
             key = os.getenv("DEEPSEEK_API_KEY")
             if key:
-                st.success("✅ 从 .env 文件读取 API Key 成功")
                 return key
-        else:
-            st.warning(f"⚠️ .env 文件不存在: {env_path}，尝试从环境变量读取...")
     except Exception as e:
         st.error(f"❌ 读取 .env 失败: {e}")
 
     key = os.environ.get("DEEPSEEK_API_KEY")
     if key:
-        st.success("✅ 从环境变量读取 API Key 成功")
         return key
 
-    st.error("""
-    ❌ 未找到 DEEPSEEK_API_KEY！
-    请在项目根目录创建 `.env` 文件，写入：
-    DEEPSEEK_API_KEY=sk-你的真实密钥
-    """)
     return None
 
 
 DEEPSEEK_API_KEY = get_deepseek_key()
 if DEEPSEEK_API_KEY:
     os.environ["DEEPSEEK_API_KEY"] = DEEPSEEK_API_KEY
-else:
-    st.stop()
 
 
 # ============== 导入项目模块 ==============
@@ -116,8 +105,8 @@ def format_source_label(chunk, index):
 
 def has_local_knowledge_base():
     """检查本地是否已有可直接使用的知识库。"""
-    index_path = Path("data/faiss_index/index.faiss")
-    meta_path = Path("data/faiss_index/chunks_meta.jsonl")
+    index_path = project_root / "data/faiss_index/index.faiss"
+    meta_path = project_root / "data/faiss_index/chunks_meta.jsonl"
     return index_path.exists(), meta_path.exists()
 
 
@@ -143,25 +132,43 @@ with st.sidebar:
     st.subheader("📊 知识库状态")
     index_exists, meta_exists = has_local_knowledge_base()
     knowledge_ready = index_exists and meta_exists
-    txt_files = list(Path("data/chunks").rglob("*.txt")) if Path("data/chunks").exists() else []
+    chunks_dir = project_root / "data/chunks"
+    txt_files = list(chunks_dir.rglob("*.txt")) if chunks_dir.exists() else []
+    api_ready = bool(os.environ.get("DEEPSEEK_API_KEY"))
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("📄 知识块", len(txt_files))
     col2.metric("🔍 索引", "✅" if knowledge_ready else "❌")
+    col3.metric("🔑 API", "✅" if api_ready else "❌")
     if st.session_state.get("retriever_initialized"):
         model_status = "✅"
     elif st.session_state.get("model_load_failed"):
         model_status = "❌"
-    elif knowledge_ready:
+    elif knowledge_ready and api_ready:
         model_status = "待加载"
     else:
         model_status = "❌"
-    col3.metric("🧠 模型", model_status)
+    col4.metric("🧠 模型", model_status)
 
     if knowledge_ready:
-        st.success("已检测到本地知识库，可直接开始问答。")
+        st.success("已检测到本地索引。")
     else:
         st.warning("未检测到本地知识库。可在下方上传 PDF 构建。")
+        with st.expander("路径诊断", expanded=True):
+            st.code(str(project_root))
+            st.write("index.faiss:", (project_root / "data/faiss_index/index.faiss").exists())
+            st.write("chunks_meta.jsonl:", (project_root / "data/faiss_index/chunks_meta.jsonl").exists())
+
+    if not api_ready:
+        st.warning("未配置 DeepSeek API Key，无法初始化问答模型。")
+        api_key_input = st.text_input("临时输入 DeepSeek API Key", type="password")
+        if api_key_input:
+            os.environ["DEEPSEEK_API_KEY"] = api_key_input
+            st.session_state.pipeline = None
+            st.session_state.retriever_initialized = False
+            st.session_state.model_load_failed = False
+            st.rerun()
+
     st.divider()
 
     with st.expander("📤 更新或替换教材（可选）", expanded=not knowledge_ready):
@@ -221,7 +228,8 @@ if "model_load_failed" not in st.session_state:
     st.session_state.model_load_failed = False
 
 # 加载系统
-if index_exists and meta_exists and not st.session_state.retriever_initialized:
+api_ready = bool(os.environ.get("DEEPSEEK_API_KEY"))
+if index_exists and meta_exists and api_ready and not st.session_state.retriever_initialized:
     try:
         with st.spinner("🔄 加载系统..."):
             st.session_state.pipeline = MathRAGPipeline()
@@ -236,6 +244,14 @@ if index_exists and meta_exists and not st.session_state.retriever_initialized:
 
 if not index_exists or not meta_exists:
     st.warning("⚠️ 未检测到本地知识库。请在左侧“更新或替换教材（可选）”中上传 PDF 构建一次。")
+    st.stop()
+
+if not api_ready:
+    st.warning("⚠️ 已检测到本地索引，但还没有配置 DeepSeek API Key。请在左侧输入临时 Key，或在项目根目录创建 `.env`。")
+    st.stop()
+
+if st.session_state.model_load_failed:
+    st.warning("⚠️ API Key 已配置，但 embedding/reranker 模型未加载成功。请检查网络或配置本地模型目录。")
     st.stop()
 
 # ========== 显示历史消息（带安全检查） ==========
