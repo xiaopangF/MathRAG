@@ -1,4 +1,4 @@
-"""
+﻿"""
 MathRAG Web 界面
 基于 Streamlit 的高等数学知识库问答系统
 """
@@ -94,8 +94,10 @@ with st.sidebar:
     st.divider()
 
     st.subheader("📊 系统状态")
-    index_exists = Path("data/faiss_index").exists()
-    meta_exists = Path("data/chunks_meta.pkl").exists()
+    index_exists = Path("data/faiss_index/
+    index.faiss").exists()
+    meta_exists = Path("data/faiss_index/
+    chunks_meta.jsonl").exists()
     txt_files = list(Path("data/chunks").rglob("*.txt")) if Path("data/chunks").exists() else []
 
     col1, col2, col3 = st.columns(3)

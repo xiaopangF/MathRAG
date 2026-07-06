@@ -1,0 +1,21 @@
+﻿models:
+  embedding_model: BAAI/bge-small-zh-v1.5
+  reranker_model: BAAI/bge-reranker-base
+  llm_model: deepseek-chat
+
+paths:
+  chunk_dir: data/chunks/children
+  chunk_metadata: data/chunks/metadata.jsonl
+  faiss_index_dir: data/faiss_index
+  faiss_index_file: index.faiss
+  faiss_metadata_file: chunks_meta.jsonl
+
+retrieval:
+  top_k_embedding: 20
+  top_k_rerank: 3
+  use_gpu: false
+  cache_enabled: true
+  cache_ttl: 300
+
+  temperature: 0.3
+  max_tokens: 2048
