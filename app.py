@@ -4,12 +4,13 @@ MathRAG Web 界面
 """
 import sys
 from pathlib import Path
+import os
 
 # 把项目根目录加到 Python 路径
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
+os.chdir(project_root)
 
-import os
 import tempfile
 import streamlit as st
 from collections.abc import Iterable
@@ -122,13 +123,14 @@ def has_local_knowledge_base():
 
 def show_model_loading_help(error):
     """展示模型加载失败时的可操作提示。"""
+    st.session_state.model_load_failed = True
     st.error(f"❌ 失败: {error}")
     st.info(
         "这是 embedding/reranker 模型加载失败，不是 PDF 本身的问题。"
-        "如果已有本地知识库，可以不上传 PDF，直接问答；"
-        "如果需要重建知识库，请确保能访问 HuggingFace/镜像站，"
-        "或在 `.env` 中把 `MATHRAG_EMBEDDING_MODEL` 和 "
-        "`MATHRAG_RERANKER_MODEL` 配成本地模型目录。"
+        "已有本地知识库只能跳过 PDF 上传和索引构建；"
+        "但问答仍需要加载 embedding 模型来编码用户问题，并需要 reranker 模型重排结果。"
+        "请确保能访问 HuggingFace/镜像站，或在 `.env` 中把 "
+        "`MATHRAG_EMBEDDING_MODEL` 和 `MATHRAG_RERANKER_MODEL` 配成本地模型目录。"
     )
 
 
@@ -145,8 +147,16 @@ with st.sidebar:
 
     col1, col2, col3 = st.columns(3)
     col1.metric("📄 知识块", len(txt_files))
-    col2.metric("🔍 索引", "✅" if index_exists else "❌")
-    col3.metric("🧠 模型", "✅" if index_exists else "❌")
+    col2.metric("🔍 索引", "✅" if knowledge_ready else "❌")
+    if st.session_state.get("retriever_initialized"):
+        model_status = "✅"
+    elif st.session_state.get("model_load_failed"):
+        model_status = "❌"
+    elif knowledge_ready:
+        model_status = "待加载"
+    else:
+        model_status = "❌"
+    col3.metric("🧠 模型", model_status)
 
     if knowledge_ready:
         st.success("已检测到本地知识库，可直接开始问答。")
@@ -207,6 +217,8 @@ if "pipeline" not in st.session_state:
     st.session_state.pipeline = None
 if "retriever_initialized" not in st.session_state:
     st.session_state.retriever_initialized = False
+if "model_load_failed" not in st.session_state:
+    st.session_state.model_load_failed = False
 
 # 加载系统
 if index_exists and meta_exists and not st.session_state.retriever_initialized:
@@ -214,6 +226,7 @@ if index_exists and meta_exists and not st.session_state.retriever_initialized:
         with st.spinner("🔄 加载系统..."):
             st.session_state.pipeline = MathRAGPipeline()
             st.session_state.retriever_initialized = True
+            st.session_state.model_load_failed = False
             st.success("✅ 系统加载完成！")
     except Exception as e:
         if "huggingface" in str(e).lower() or "hf-mirror" in str(e).lower():
