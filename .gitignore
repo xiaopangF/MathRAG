@@ -1,4 +1,3 @@
-@'
 # environment
 .env
 .env.*
@@ -11,6 +10,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 .pytest_cache/
+.pytest_tmp/
 .mypy_cache/
 .ruff_cache/
 
@@ -34,4 +34,3 @@ data/
 # system
 .DS_Store
 Thumbs.db
-'@ | Set-Content -Encoding UTF8 .gitignore.pytest_tmp/
