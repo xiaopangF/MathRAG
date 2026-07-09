@@ -12,7 +12,10 @@ paths:
 
 retrieval:
   top_k_embedding: 20
+  top_k_bm25: 20
   top_k_rerank: 3
+  rerank_batch_size: 64
+  use_hybrid_search: true
   use_gpu: false
   cache_enabled: true
   cache_ttl: 300

@@ -75,6 +75,9 @@ def evaluate_retrieval(
     index_dir: str | Path = "data/faiss_index",
     top_k: int = 5,
     top_k_embedding: int = 20,
+    top_k_bm25: int = 20,
+    rerank_batch_size: int = 32,
+    use_hybrid_search: bool = True,
     use_gpu: bool = False,
 ) -> dict[str, Any]:
     """Run retrieval evaluation and return metrics plus failed cases."""
@@ -96,29 +99,39 @@ def evaluate_retrieval(
     config = RAGConfig(
         faiss_index_dir=str(index_dir),
         top_k_embedding=max(top_k_embedding, top_k),
+        top_k_bm25=max(top_k_bm25, top_k),
         top_k_rerank=top_k,
+        rerank_batch_size=rerank_batch_size,
+        use_hybrid_search=use_hybrid_search,
         use_gpu=use_gpu,
     )
     retriever = MathRAGRetriever(config)
 
     questions = load_eval_questions(eval_path)
+    evaluable_items = [
+        item
+        for item in questions
+        if get_expected_keywords(item)
+    ]
+    skipped_count = len(questions) - len(evaluable_items)
+    print(f"开始批量检索评测: {len(evaluable_items)} 个有效问题")
+    batch_results = retriever.batch_retrieve(
+        [item["question"] for item in evaluable_items],
+        top_k=top_k,
+    )
+
     evaluated_count = 0
-    skipped_count = 0
     hit_at_1 = 0
     hit_at_3 = 0
     hit_at_5 = 0
     reciprocal_ranks: list[float] = []
     failed_cases: list[dict[str, Any]] = []
 
-    for item in questions:
+    for item, results in zip(evaluable_items, batch_results):
         question = item["question"]
         expected = get_expected_keywords(item)
-        if not expected:
-            skipped_count += 1
-            continue
 
         evaluated_count += 1
-        results = retriever.retrieve(question, top_k=top_k)
 
         rank = None
         for i, result in enumerate(results, start=1):
@@ -161,6 +174,9 @@ def evaluate_retrieval(
         "skipped_count": skipped_count,
         "top_k": top_k,
         "top_k_embedding": max(top_k_embedding, top_k),
+        "top_k_bm25": max(top_k_bm25, top_k),
+        "rerank_batch_size": rerank_batch_size,
+        "use_hybrid_search": use_hybrid_search,
         "recall_at_1": hit_at_1 / evaluated_count if evaluated_count else 0,
         "recall_at_3": hit_at_3 / evaluated_count if evaluated_count else 0,
         "recall_at_5": hit_at_5 / evaluated_count if evaluated_count else 0,
@@ -187,6 +203,10 @@ def print_report(metrics: dict[str, Any], max_failures: int = 10) -> None:
     print(f"总问题数: {metrics['question_count']}")
     print(f"有效评测数: {metrics['evaluated_count']}")
     print(f"跳过问题数: {metrics['skipped_count']}")
+    print(f"混合检索: {'开启' if metrics['use_hybrid_search'] else '关闭'}")
+    print(f"Embedding Top-K: {metrics['top_k_embedding']}")
+    print(f"BM25 Top-K: {metrics['top_k_bm25']}")
+    print(f"Rerank Batch Size: {metrics['rerank_batch_size']}")
     print(f"Recall@1: {metrics['recall_at_1']:.2%} ({metrics['hits']['hit_at_1']}/{total})")
     print(f"Recall@3: {metrics['recall_at_3']:.2%} ({metrics['hits']['hit_at_3']}/{total})")
     print(f"Recall@5: {metrics['recall_at_5']:.2%} ({metrics['hits']['hit_at_5']}/{total})")
@@ -217,6 +237,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--index-dir", default="data/faiss_index")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--top-k-embedding", type=int, default=20)
+    parser.add_argument("--top-k-bm25", type=int, default=20)
+    parser.add_argument("--rerank-batch-size", type=int, default=32)
+    parser.add_argument("--no-hybrid-search", action="store_true")
     parser.add_argument("--use-gpu", action="store_true")
     parser.add_argument("--output-json", default="")
     parser.add_argument("--max-failures", type=int, default=10)
@@ -233,6 +256,9 @@ def main() -> int:
             index_dir=args.index_dir,
             top_k=args.top_k,
             top_k_embedding=args.top_k_embedding,
+            top_k_bm25=args.top_k_bm25,
+            rerank_batch_size=args.rerank_batch_size,
+            use_hybrid_search=not args.no_hybrid_search,
             use_gpu=args.use_gpu,
         )
     except (FileNotFoundError, ValueError, ImportError, RuntimeError, OSError) as exc:

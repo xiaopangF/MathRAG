@@ -54,6 +54,15 @@ class LLMGenerator:
 """
 
     @staticmethod
+    def _format_page_range(page_start: Any, page_end: Any) -> str:
+        """Format a source page range for prompt metadata."""
+        if page_start in (None, ""):
+            return ""
+        if page_end in (None, "") or page_end == page_start:
+            return str(page_start)
+        return f"{page_start}-{page_end}"
+
+    @staticmethod
     def _normalize_context(context: Any, index: int) -> dict:
         """兼容旧 tuple 格式和新的结构化 context 格式。"""
         if isinstance(context, dict):
@@ -65,6 +74,9 @@ class LLMGenerator:
                 "chapter": context.get("chapter", ""),
                 "section": context.get("section", ""),
                 "chunk_type": context.get("chunk_type", ""),
+                "source_file": context.get("source_file", ""),
+                "page_start": context.get("page_start"),
+                "page_end": context.get("page_end"),
             }
 
         if isinstance(context, (list, tuple)) and len(context) >= 2:
@@ -76,6 +88,9 @@ class LLMGenerator:
                 "chapter": "",
                 "section": "",
                 "chunk_type": "",
+                "source_file": "",
+                "page_start": None,
+                "page_end": None,
             }
 
         return {
@@ -86,6 +101,9 @@ class LLMGenerator:
             "chapter": "",
             "section": "",
             "chunk_type": "",
+            "source_file": "",
+            "page_start": None,
+            "page_end": None,
         }
 
     def generate(self, query: str, contexts: list[Any]) -> str:
@@ -105,6 +123,11 @@ class LLMGenerator:
         context_text = ""
         for item in normalized_contexts:
             metadata = []
+            if item["source_file"]:
+                metadata.append(f"来源文件: {item['source_file']}")
+            page_range = self._format_page_range(item["page_start"], item["page_end"])
+            if page_range:
+                metadata.append(f"页码: {page_range}")
             if item["chapter"]:
                 metadata.append(f"章节: {item['chapter']}")
             if item["section"]:

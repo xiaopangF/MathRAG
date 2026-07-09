@@ -9,6 +9,9 @@ def test_normalize_context_supports_structured_context():
         "chapter": "第二章 一元函数微分学",
         "section": "导数",
         "chunk_type": "definition",
+        "source_file": "高等数学.pdf",
+        "page_start": 47,
+        "page_end": 48,
     }
 
     result = LLMGenerator._normalize_context(context, 1)
@@ -21,6 +24,9 @@ def test_normalize_context_supports_structured_context():
         "chapter": "第二章 一元函数微分学",
         "section": "导数",
         "chunk_type": "definition",
+        "source_file": "高等数学.pdf",
+        "page_start": 47,
+        "page_end": 48,
     }
 
 
@@ -35,4 +41,13 @@ def test_normalize_context_supports_legacy_tuple_context():
         "chapter": "",
         "section": "",
         "chunk_type": "",
+        "source_file": "",
+        "page_start": None,
+        "page_end": None,
     }
+
+
+def test_format_page_range_supports_single_page_and_ranges():
+    assert LLMGenerator._format_page_range(47, 47) == "47"
+    assert LLMGenerator._format_page_range(47, 48) == "47-48"
+    assert LLMGenerator._format_page_range(None, 48) == ""

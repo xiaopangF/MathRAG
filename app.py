@@ -78,12 +78,23 @@ def ensure_iterable(obj):
     return [obj]
 
 
+def format_page_range(page_start, page_end):
+    """格式化页码范围。"""
+    if page_start in (None, ""):
+        return ""
+    if page_end in (None, "") or page_end == page_start:
+        return str(page_start)
+    return f"{page_start}-{page_end}"
+
+
 def format_source_label(chunk, index):
     """格式化引用来源标题"""
     if not isinstance(chunk, dict):
         content, score = get_chunk_content_score(chunk)
         return f"片段 {index} (相关性: {score:.4f})"
 
+    source_file = chunk.get("source_file") or ""
+    page_range = format_page_range(chunk.get("page_start"), chunk.get("page_end"))
     title = chunk.get("title") or "未知标题"
     chapter = chunk.get("chapter") or ""
     section = chunk.get("section") or ""
@@ -91,6 +102,10 @@ def format_source_label(chunk, index):
     score = chunk.get("score", 0.0)
 
     parts = [f"片段 {index}"]
+    if source_file:
+        parts.append(source_file)
+    if page_range:
+        parts.append(f"第 {page_range} 页")
     if chapter:
         parts.append(chapter)
     if section:
@@ -191,7 +206,12 @@ with st.sidebar:
 
                         st.info("正在结构化切分教材...")
                         chunks = smart_split_by_titles(full_text)
-                        save_chunks_to_files(chunks, "data/chunks", clear_existing=True)
+                        save_chunks_to_files(
+                            chunks,
+                            "data/chunks",
+                            clear_existing=True,
+                            source_file=uploaded_file.name,
+                        )
 
                         st.info("正在构建向量索引...")
                         from src.retriever.vector_indexer import build_vector_index
@@ -257,6 +277,11 @@ if st.session_state.model_load_failed:
 # ========== 显示历史消息（带安全检查） ==========
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
+        confidence = message.get("confidence", {})
+        if message["role"] == "assistant" and confidence and not confidence.get("is_sufficient", True):
+            top_score = confidence.get("top_rerank_score")
+            min_score = confidence.get("min_rerank_score")
+            st.warning(f"依据不足：最高相关性 {top_score if top_score is not None else '无'}，阈值 {min_score}")
         st.markdown(message["content"])
         if message["role"] == "assistant" and "contexts" in message:
             with st.expander("📖 查看检索到的相关片段"):
@@ -280,6 +305,11 @@ if prompt := st.chat_input("输入你的高数问题..."):
                     st.stop()
 
                 result = st.session_state.pipeline.ask(prompt)
+                confidence = result.get("confidence", {})
+                if confidence and not confidence.get("is_sufficient", True):
+                    top_score = confidence.get("top_rerank_score")
+                    min_score = confidence.get("min_rerank_score")
+                    st.warning(f"依据不足：最高相关性 {top_score if top_score is not None else '无'}，阈值 {min_score}")
                 st.markdown(result["answer"])
 
                 # 显示检索片段（安全迭代）
@@ -294,7 +324,8 @@ if prompt := st.chat_input("输入你的高数问题..."):
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": result["answer"],
-                    "contexts": ensure_iterable(result.get("contexts", []))
+                    "contexts": ensure_iterable(result.get("contexts", [])),
+                    "confidence": result.get("confidence", {}),
                 })
 
             except Exception as e:

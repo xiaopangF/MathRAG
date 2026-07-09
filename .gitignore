@@ -22,9 +22,15 @@ __pycache__/
 .streamlit/
 
 # data and generated files
-data/
+data/*
 !data/.gitkeep
-reports/
+!data/eval/
+data/eval/*
+!data/eval/questions.jsonl
+reports/*
+!reports/
+!reports/retrieval_metrics_100_hybrid.json
+!reports/retrieval_metrics_100_vector_only.json
 
 # model / index artifacts
 *.faiss

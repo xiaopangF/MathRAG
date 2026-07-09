@@ -30,6 +30,7 @@ UNIT_PATTERN = re.compile(
     r'^\s*(定义|定理|性质|公式|例题|例|证明|推论|命题|公理|引理|注|注意|习题|练习)\s*[^\n]{0,50}',
     re.MULTILINE
 )
+PAGE_MARKER_PATTERN = re.compile(r'^\s*\[PAGE\s+(\d+)\]\s*$', re.IGNORECASE)
 
 
 def normalize_text(text: str) -> str:
@@ -48,6 +49,15 @@ def safe_filename_part(text: str, max_length: int = 40) -> str:
     return (text[:max_length] or "untitled")
 
 
+def apply_page_to_chunk(chunk: Dict[str, Any] | None, page: int | None) -> None:
+    """Update a chunk's page range when a line is known to belong to a page."""
+    if chunk is None or page is None:
+        return
+    if chunk.get("page_start") is None:
+        chunk["page_start"] = page
+    chunk["page_end"] = page
+
+
 def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
     """
     根据标题层级切分全文，返回 chunks 列表。
@@ -58,6 +68,7 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
 
     chunks = []
     current_chunk = None
+    current_page = None
 
     # 定义标题匹配函数
     def get_title_level(line: str) -> tuple:
@@ -74,6 +85,11 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
         return (-1, None)
 
     for line_no, line in enumerate(lines):
+        page_match = PAGE_MARKER_PATTERN.match(line)
+        if page_match:
+            current_page = int(page_match.group(1))
+            continue
+
         level, title = get_title_level(line)
         if level >= 0:
             # 新标题开始，保存上一个chunk
@@ -83,12 +99,15 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
                 'title': title,
                 'level': level,
                 'content': '',
-                'start_line': line_no
+                'start_line': line_no,
+                'page_start': current_page,
+                'page_end': current_page,
             }
         else:
             # 普通内容行
             if current_chunk:
                 current_chunk['content'] += line + '\n'
+                apply_page_to_chunk(current_chunk, current_page)
             else:
                 # 还没有标题，全部归入"前言"
                 if not chunks or chunks[-1]['title'] != '前言':
@@ -96,9 +115,12 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
                         'title': '前言',
                         'level': -1,
                         'content': '',
-                        'start_line': 0
+                        'start_line': 0,
+                        'page_start': current_page,
+                        'page_end': current_page,
                     }
                 current_chunk['content'] += line + '\n'
+                apply_page_to_chunk(current_chunk, current_page)
 
     # 保存最后一个
     if current_chunk:
@@ -115,6 +137,7 @@ def save_chunks_to_files(
     chunks: List[Dict[str, Any]],
     output_dir: str = "data/chunks",
     clear_existing: bool = True,
+    source_file: str = "",
 ):
     """
     将切分结果保存为文件，并生成 metadata.jsonl
@@ -144,6 +167,8 @@ def save_chunks_to_files(
                 'level': chunk['level'],
                 'content': chunk['content'],
                 'start_line': chunk.get('start_line', 0),
+                'page_start': chunk.get('page_start'),
+                'page_end': chunk.get('page_end'),
             }
             parent_file = parent_dir / f"{parent['id']}_{safe_filename_part(parent['title'])}.txt"
             parent_file.write_text(parent['content'], encoding='utf-8')
@@ -154,7 +179,10 @@ def save_chunks_to_files(
                 'level': 'parent',
                 'title': parent['title'],
                 'file': str(parent_file.relative_to(output_path.parent)),
-                'char_count': len(parent['content'])
+                'char_count': len(parent['content']),
+                'source_file': source_file,
+                'page_start': parent['page_start'],
+                'page_end': parent['page_end'],
             }, ensure_ascii=False) + '\n')
 
             # 对父块内容进行子块切分（按单元）
@@ -173,7 +201,9 @@ def save_chunks_to_files(
                             'parent_id': parent['id'],
                             'title': unit_title,
                             'content': unit_content,
-                            'type': classify_unit(unit_title)
+                            'type': classify_unit(unit_title),
+                            'page_start': parent['page_start'],
+                            'page_end': parent['page_end'],
                         }
                         child_file = child_dir / f"{child['id']}_{safe_filename_part(child['title'])}.txt"
                         child_file.write_text(child['content'], encoding='utf-8')
@@ -185,7 +215,10 @@ def save_chunks_to_files(
                             'title': child['title'],
                             'type': child['type'],
                             'file': str(child_file.relative_to(output_path.parent)),
-                            'char_count': len(child['content'])
+                            'char_count': len(child['content']),
+                            'source_file': source_file,
+                            'page_start': child['page_start'],
+                            'page_end': child['page_end'],
                         }, ensure_ascii=False) + '\n')
             else:
                 # 没有单元，整个父块作为一个子块
@@ -195,7 +228,9 @@ def save_chunks_to_files(
                     'parent_id': parent['id'],
                     'title': parent['title'],
                     'content': parent['content'],
-                    'type': 'text'
+                    'type': 'text',
+                    'page_start': parent['page_start'],
+                    'page_end': parent['page_end'],
                 }
                 child_file = child_dir / f"{child['id']}_{safe_filename_part(child['title'])}.txt"
                 child_file.write_text(child['content'], encoding='utf-8')
@@ -207,7 +242,10 @@ def save_chunks_to_files(
                     'title': child['title'],
                     'type': child['type'],
                     'file': str(child_file.relative_to(output_path.parent)),
-                    'char_count': len(child['content'])
+                    'char_count': len(child['content']),
+                    'source_file': source_file,
+                    'page_start': child['page_start'],
+                    'page_end': child['page_end'],
                 }, ensure_ascii=False) + '\n')
 
     print(f"切分完成：父块 {parent_id} 个，子块 {child_id} 个")

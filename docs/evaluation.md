@@ -95,7 +95,14 @@ python evaluate_retrieval.py `
   --index-dir data/faiss_index `
   --top-k 5 `
   --top-k-embedding 20 `
+  --top-k-bm25 20 `
   --output-json reports/retrieval_metrics.json
+```
+
+如果要做消融实验，可以关闭混合检索：
+
+```powershell
+python evaluate_retrieval.py --no-hybrid-search
 ```
 
 如果缺少索引，需要先在 Web 页面上传 PDF 并构建知识库，或直接调用索引构建脚本。
@@ -108,6 +115,21 @@ python evaluate_retrieval.py `
 | Method | Questions | Recall@1 | Recall@3 | Recall@5 | MRR |
 |---|---:|---:|---:|---:|---:|
 | BGE Embedding + Reranker | 100 | - | - | - | - |
+| BM25 + BGE + Reranker | 100 | - | - | - | - |
+```
+
+当前本地 100 题评测结果：
+
+| Method | Questions | Recall@1 | Recall@3 | Recall@5 | MRR |
+|---|---:|---:|---:|---:|---:|
+| BGE Embedding + Reranker | 100 | 85.00% | 95.00% | 96.00% | 0.8987 |
+| BM25 + BGE + Reranker | 100 | 88.00% | 97.00% | 99.00% | 0.9262 |
+
+对应 JSON 结果保存在：
+
+```text
+reports/retrieval_metrics_100_vector_only.json
+reports/retrieval_metrics_100_hybrid.json
 ```
 
 后续可以加入对比实验：
@@ -115,4 +137,4 @@ python evaluate_retrieval.py `
 - 只使用 embedding，不使用 reranker
 - 调整 `top_k_embedding`
 - 调整 chunk 切分策略
-- 加入 BM25 + 向量混合检索
+- 对比 BM25 + 向量混合检索开启/关闭后的指标差异
