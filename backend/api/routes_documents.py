@@ -8,7 +8,7 @@ from backend.schemas.documents import (
     JobStatusResponse,
     KnowledgeBaseResponse,
 )
-from backend.services.knowledge_base_service import knowledge_base_service
+from backend.services.knowledge_base_service import MAX_UPLOAD_BYTES, knowledge_base_service
 
 
 router = APIRouter(prefix="/api", tags=["documents"])
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["documents"])
 @router.post("/documents/upload", response_model=DocumentResponse)
 async def upload_document(file: UploadFile = File(...)):
     try:
-        content = await file.read()
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
         if not content:
             raise ValueError("上传文件为空")
         record = knowledge_base_service.save_document(file, content)

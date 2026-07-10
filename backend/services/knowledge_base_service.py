@@ -1,5 +1,5 @@
-import sqlite3
 import shutil
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,8 +10,25 @@ from fastapi import UploadFile
 from backend.core.paths import BACKEND_DB_PATH, DOCUMENTS_DIR, INDEXES_DIR, STORAGE_DIR
 
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+ALLOWED_PDF_CONTENT_TYPES = {
+    "",
+    "application/pdf",
+    "application/octet-stream",
+    "binary/octet-stream",
+}
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def sanitize_filename(filename: str) -> str:
+    name = Path(filename).name.strip().replace("\x00", "")
+    if not name:
+        return "document.pdf"
+    safe = "".join(char if char.isalnum() or char in "._-()[] " else "_" for char in name)
+    return safe[:160] or "document.pdf"
 
 
 class KnowledgeBaseService:
@@ -68,8 +85,16 @@ class KnowledgeBaseService:
 
     def save_document(self, upload: UploadFile, content: bytes) -> dict[str, Any]:
         self.ensure_db()
-        if not upload.filename or not upload.filename.lower().endswith(".pdf"):
+        filename = sanitize_filename(upload.filename or "")
+        content_type = (upload.content_type or "").lower()
+        if not filename.lower().endswith(".pdf"):
             raise ValueError("只支持上传 PDF 文件")
+        if content_type not in ALLOWED_PDF_CONTENT_TYPES:
+            raise ValueError(f"不支持的文件类型: {upload.content_type}")
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise ValueError(f"PDF 文件过大，上限为 {MAX_UPLOAD_BYTES // 1024 // 1024} MB")
+        if not content.startswith(b"%PDF-"):
+            raise ValueError("文件内容不是有效 PDF")
 
         document_id = f"doc_{uuid.uuid4().hex[:12]}"
         DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -78,8 +103,8 @@ class KnowledgeBaseService:
 
         record = {
             "document_id": document_id,
-            "filename": upload.filename,
-            "content_type": upload.content_type or "application/pdf",
+            "filename": filename,
+            "content_type": content_type or "application/pdf",
             "storage_path": str(storage_path),
             "size_bytes": len(content),
             "status": "uploaded",
@@ -298,6 +323,43 @@ class KnowledgeBaseService:
             "knowledge_base_id": knowledge_base_id,
             "deleted": True,
         }
+
+    def recover_interrupted_jobs(self) -> int:
+        self.ensure_db()
+        now = utc_now()
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT job_id, knowledge_base_id
+                FROM index_jobs
+                WHERE status IN ('pending', 'running')
+                """
+            ).fetchall()
+            for job_id, knowledge_base_id in rows:
+                conn.execute(
+                    """
+                    UPDATE index_jobs
+                    SET status = ?, progress = ?, message = ?, error = ?, updated_at = ?
+                    WHERE job_id = ?
+                    """,
+                    (
+                        "failed",
+                        100,
+                        "服务重启后任务已中断，请重新构建索引",
+                        "interrupted_by_restart",
+                        now,
+                        job_id,
+                    ),
+                )
+                conn.execute(
+                    """
+                    UPDATE knowledge_bases
+                    SET status = ?, updated_at = ?
+                    WHERE knowledge_base_id = ? AND status = ?
+                    """,
+                    ("failed", now, knowledge_base_id, "building"),
+                )
+        return len(rows)
 
     def build_index(self, job_id: str) -> None:
         job = self.get_job(job_id)

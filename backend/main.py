@@ -1,8 +1,11 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from backend.core.paths import PROJECT_ROOT
+from backend.services.knowledge_base_service import knowledge_base_service
 
 
 load_dotenv(PROJECT_ROOT / ".env", override=True)
@@ -15,10 +18,17 @@ from backend.api.routes_readiness import router as readiness_router
 from backend.api.routes_settings import router as settings_router
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    knowledge_base_service.recover_interrupted_jobs()
+    yield
+
+
 app = FastAPI(
     title="MathRAG API",
     version="0.1.0",
     description="API backend for MathRAG textbook question answering.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from backend.core.paths import PROJECT_ROOT
@@ -8,12 +9,13 @@ from backend.services.knowledge_base_service import knowledge_base_service
 
 
 class RAGService:
-    """Lazy wrapper around the existing MathRAGPipeline."""
+    """Lazy, thread-safe wrapper around the existing MathRAG pipeline."""
 
     def __init__(self):
         self._pipeline = None
         self._retrievers: dict[str, Any] = {}
         self._generator = None
+        self._lock = RLock()
 
     def _ensure_project_path(self) -> None:
         root = str(PROJECT_ROOT)
@@ -22,45 +24,54 @@ class RAGService:
 
     def _get_pipeline(self):
         if self._pipeline is None:
-            self._ensure_project_path()
-            os.chdir(PROJECT_ROOT)
-            from src.pipeline.qa_pipeline import MathRAGPipeline
+            with self._lock:
+                if self._pipeline is None:
+                    self._ensure_project_path()
+                    from src.pipeline.qa_pipeline import MathRAGPipeline
+                    from src.retriever.retriever import RAGConfig
 
-            self._pipeline = MathRAGPipeline()
+                    config = RAGConfig(
+                        faiss_index_dir=str(PROJECT_ROOT / "data" / "faiss_index")
+                    )
+                    self._pipeline = MathRAGPipeline(retriever_config=config)
         return self._pipeline
 
     def _get_generator(self):
         if self._generator is None:
-            self._ensure_project_path()
-            from src.generation.llm_generator import LLMGenerator
+            with self._lock:
+                if self._generator is None:
+                    self._ensure_project_path()
+                    from src.generation.llm_generator import LLMGenerator
 
-            self._generator = LLMGenerator()
+                    self._generator = LLMGenerator()
         return self._generator
 
     def configure_deepseek(self, api_key: str, base_url: str) -> None:
-        os.environ["DEEPSEEK_API_KEY"] = api_key
-        os.environ["DEEPSEEK_BASE_URL"] = base_url
-        self._generator = None
-        if self._pipeline is not None:
-            self._pipeline.generator = self._get_generator()
+        with self._lock:
+            os.environ["DEEPSEEK_API_KEY"] = api_key
+            os.environ["DEEPSEEK_BASE_URL"] = base_url
+            self._generator = None
+            if self._pipeline is not None:
+                self._pipeline.generator = self._get_generator()
 
     def _get_retriever(self, knowledge_base_id: str):
-        if knowledge_base_id in self._retrievers:
-            return self._retrievers[knowledge_base_id]
+        with self._lock:
+            if knowledge_base_id in self._retrievers:
+                return self._retrievers[knowledge_base_id]
 
-        kb = knowledge_base_service.get_knowledge_base(knowledge_base_id)
-        if not kb:
-            raise ValueError(f"知识库不存在: {knowledge_base_id}")
-        if kb["status"] != "ready":
-            raise ValueError(f"知识库尚未就绪: {knowledge_base_id} ({kb['status']})")
+            kb = knowledge_base_service.get_knowledge_base(knowledge_base_id)
+            if not kb:
+                raise ValueError(f"知识库不存在: {knowledge_base_id}")
+            if kb["status"] != "ready":
+                raise ValueError(f"知识库尚未就绪: {knowledge_base_id} ({kb['status']})")
 
-        self._ensure_project_path()
-        from src.retriever.retriever import MathRAGRetriever, RAGConfig
+            self._ensure_project_path()
+            from src.retriever.retriever import MathRAGRetriever, RAGConfig
 
-        config = RAGConfig(faiss_index_dir=kb["index_dir"])
-        retriever = MathRAGRetriever(config)
-        self._retrievers[knowledge_base_id] = retriever
-        return retriever
+            config = RAGConfig(faiss_index_dir=kb["index_dir"])
+            retriever = MathRAGRetriever(config)
+            self._retrievers[knowledge_base_id] = retriever
+            return retriever
 
     @staticmethod
     def _contexts_from_chunks(chunks) -> list[dict[str, Any]]:
@@ -101,7 +112,7 @@ class RAGService:
         if not chunks:
             return {
                 "query": question,
-                "answer": "❌ 未找到相关知识，请检查教材内容。",
+                "answer": "未找到相关知识，请检查教材内容。",
                 "contexts": [],
                 "confidence": {
                     "is_sufficient": False,
