@@ -1,0 +1,59 @@
+name: mathrag
+
+x-backend-environment: &backend-environment
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+  DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+  HF_ENDPOINT: ${HF_ENDPOINT:-https://huggingface.co}
+  MATHRAG_EMBEDDING_MODEL: ${MATHRAG_EMBEDDING_MODEL:-BAAI/bge-small-zh-v1.5}
+  MATHRAG_RERANKER_MODEL: ${MATHRAG_RERANKER_MODEL:-BAAI/bge-reranker-base}
+  MATHRAG_MIN_RERANK_SCORE: ${MATHRAG_MIN_RERANK_SCORE:-0.2}
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment: *backend-environment
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./storage:/app/storage
+      - ./reports:/app/reports
+      - huggingface-cache:/root/.cache/huggingface
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  model-cache:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - tools
+    environment: *backend-environment
+    volumes:
+      - huggingface-cache:/root/.cache/huggingface
+    command: ["python", "scripts/prewarm_models.py"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: "same-origin"
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+
+volumes:
+  huggingface-cache:

@@ -91,6 +91,7 @@ button:disabled {
 .shell {
   display: grid;
   grid-template-columns: 360px 1fr;
+  width: 100%;
   min-height: 100vh;
   gap: 0;
 }
@@ -99,6 +100,7 @@ button:disabled {
 .sidebar {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 20px;
   padding: 28px 24px;
   background: linear-gradient(180deg, var(--bg-sidebar) 0%, #F8FAFE 100%);
@@ -164,6 +166,8 @@ button:disabled {
 .panel {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  width: 100%;
   gap: 12px;
   padding: 18px 20px;
   border-radius: var(--radius-md);
@@ -230,6 +234,11 @@ button:disabled {
   color: var(--text-secondary);
 }
 
+.statusRows div > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .statusRows .label {
   font-weight: 400;
 }
@@ -241,6 +250,7 @@ button:disabled {
 
 .pill {
   display: inline-block;
+  flex: 0 0 auto;
   padding: 2px 12px;
   border-radius: 999px;
   font-size: 11px;
@@ -264,6 +274,22 @@ button:disabled {
   color: #D4A017;
 }
 
+.readinessIssues {
+  display: grid;
+  gap: 6px;
+  max-height: 112px;
+  overflow-y: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.readinessIssues p {
+  margin: 0;
+  color: #9A6700;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* Form elements */
 select,
 input[type="number"],
@@ -271,6 +297,8 @@ input[type="password"],
 input[type="text"],
 textarea {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border: 2px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--bg-secondary);
@@ -305,6 +333,7 @@ select {
 /* File picker */
 .filePicker {
   display: grid;
+  min-width: 0;
   place-items: center;
   min-height: 80px;
   border: 2px dashed var(--border-color);
@@ -446,6 +475,7 @@ progress::-moz-progress-bar {
 
 .jobHistory {
   display: grid;
+  min-width: 0;
   gap: 10px;
   max-height: 280px;
   overflow-y: auto;
@@ -453,6 +483,7 @@ progress::-moz-progress-bar {
 
 .jobItem {
   display: grid;
+  min-width: 0;
   gap: 7px;
   padding: 10px 12px;
   border: 1px solid var(--border-color);

@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.vscode
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.env
+data
+storage
+frontend
+tests
+docs
+eval
+*.md

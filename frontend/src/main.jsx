@@ -6,7 +6,10 @@ import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 import "./styles.css";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
+const configuredApiBase = import.meta.env.VITE_API_BASE;
+const API_BASE = configuredApiBase === "same-origin"
+  ? ""
+  : configuredApiBase || "http://127.0.0.1:8000";
 
 function cn(...parts) {
   return parts.filter(Boolean).join(" ");
@@ -61,9 +64,7 @@ function MathMarkdown({ content }) {
 
 function App() {
   const [health, setHealth] = useState("checking");
-  const [settings, setSettings] = useState(null);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [baseUrlInput, setBaseUrlInput] = useState("https://api.deepseek.com/v1");
+  const [readiness, setReadiness] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [knowledgeBases, setKnowledgeBases] = useState([]);
   const [jobs, setJobs] = useState([]);
@@ -92,11 +93,9 @@ function App() {
     }
 
     try {
-      const result = await request("/api/settings");
-      setSettings(result);
-      setBaseUrlInput(result.deepseek_base_url || "https://api.deepseek.com/v1");
+      setReadiness(await request("/api/readiness"));
     } catch {
-      setSettings(null);
+      setReadiness(null);
     }
 
     try {
@@ -108,27 +107,6 @@ function App() {
 
     await refreshKnowledgeBases();
     await refreshJobs();
-  }
-
-  async function saveDeepSeekKey(event) {
-    event.preventDefault();
-    if (!apiKeyInput.trim()) return;
-    setError("");
-
-    try {
-      const result = await request("/api/settings/deepseek-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: apiKeyInput.trim(),
-          base_url: baseUrlInput.trim() || "https://api.deepseek.com/v1",
-        }),
-      });
-      setSettings(result);
-      setApiKeyInput("");
-    } catch (err) {
-      setError(err.message);
-    }
   }
 
   async function refreshKnowledgeBases() {
@@ -242,6 +220,20 @@ function App() {
     return "•";
   }
 
+  function readinessLabel(check) {
+    if (!check) return "检查中";
+    if (check.status === "ready") return "就绪";
+    if (check.status === "download_required") return "需下载";
+    return "缺失";
+  }
+
+  function readinessTone(check) {
+    if (!check) return "warn";
+    if (check.status === "ready") return "good";
+    if (check.status === "download_required") return "warn";
+    return "bad";
+  }
+
   async function ask(event) {
     event.preventDefault();
     const trimmed = question.trim();
@@ -340,9 +332,39 @@ function App() {
               <strong className={cn("pill", health === "ok" ? "good" : "bad")}>{health}</strong>
             </div>
             <div>
-              <span>🤖 DeepSeek</span>
-              <strong className={cn("pill", settings?.deepseek_api_key_configured ? "good" : "warn")}>
-                {settings?.deepseek_api_key_configured ? "✅ 已配置" : "❌ 未配置"}
+              <span>默认索引</span>
+              <strong
+                className={cn("pill", readinessTone(readiness?.checks?.default_index))}
+                title={readiness?.checks?.default_index?.detail}
+              >
+                {readinessLabel(readiness?.checks?.default_index)}
+              </strong>
+            </div>
+            <div>
+              <span>Embedding</span>
+              <strong
+                className={cn("pill", readinessTone(readiness?.checks?.embedding_model))}
+                title={readiness?.checks?.embedding_model?.detail}
+              >
+                {readinessLabel(readiness?.checks?.embedding_model)}
+              </strong>
+            </div>
+            <div>
+              <span>Reranker</span>
+              <strong
+                className={cn("pill", readinessTone(readiness?.checks?.reranker_model))}
+                title={readiness?.checks?.reranker_model?.detail}
+              >
+                {readinessLabel(readiness?.checks?.reranker_model)}
+              </strong>
+            </div>
+            <div>
+              <span>DeepSeek Key</span>
+              <strong
+                className={cn("pill", readinessTone(readiness?.checks?.deepseek_api_key))}
+                title={readiness?.checks?.deepseek_api_key?.detail}
+              >
+                {readinessLabel(readiness?.checks?.deepseek_api_key)}
               </strong>
             </div>
             <div>
@@ -354,30 +376,12 @@ function App() {
               <strong>{metrics?.question_count ?? "-"}</strong>
             </div>
           </div>
+          {!!readiness?.blockers?.length && (
+            <div className="readinessIssues">
+              {readiness.blockers.map((blocker) => <p key={blocker}>{blocker}</p>)}
+            </div>
+          )}
         </section>
-
-        {false && (
-        <form className="panel" onSubmit={saveDeepSeekKey}>
-          <h2>🔑 DeepSeek 配置</h2>
-          <input
-            type="password"
-            value={apiKeyInput}
-            onChange={(event) => setApiKeyInput(event.target.value)}
-            placeholder="输入 API Key (sk-...)"
-            autoComplete="off"
-          />
-          <input
-            type="text"
-            value={baseUrlInput}
-            onChange={(event) => setBaseUrlInput(event.target.value)}
-            placeholder="API Base URL"
-          />
-          <button type="submit" className="primary" disabled={!apiKeyInput.trim()}>
-            💾 保存配置
-          </button>
-          <p className="muted">⚠️ 重启后端后失效 · 长期使用请写入 .env</p>
-        </form>
-        )}
 
         <section className="panel">
           <div className="panelHead">
