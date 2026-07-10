@@ -9,5 +9,5 @@ router = APIRouter(prefix="/api", tags=["feedback"])
 
 @router.post("/feedback", response_model=FeedbackResponse)
 def save_feedback(request: FeedbackRequest):
-    feedback_id = feedback_service.save(request.dict())
+    feedback_id = feedback_service.save(request.model_dump())
     return FeedbackResponse(id=feedback_id)

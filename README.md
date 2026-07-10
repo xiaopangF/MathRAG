@@ -132,6 +132,14 @@ HF_ENDPOINT=https://huggingface.co
 MATHRAG_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
 MATHRAG_RERANKER_MODEL=BAAI/bge-reranker-base
 MATHRAG_MIN_RERANK_SCORE=0.2
+MATHRAG_LOG_LEVEL=INFO
+MATHRAG_LOG_JSON=true
+MATHRAG_MAX_UPLOAD_MB=50
+MATHRAG_MAX_JSON_BODY_MB=1
+MATHRAG_JOB_MAX_ATTEMPTS=3
+MATHRAG_RAG_MAX_CONCURRENCY=2
+MATHRAG_LLM_TIMEOUT_SECONDS=30
+MATHRAG_LLM_MAX_RETRIES=2
 ```
 
 如果当前网络无法访问 HuggingFace 或镜像站，可以先把模型下载到本地，然后把模型变量改成本地路径：
@@ -330,7 +338,24 @@ retrieval:
 config/config.yaml
 ```
 
-当前包含模型、索引路径、检索参数和 LLM 参数。后续可以将代码中的硬编码参数逐步迁移到该配置文件。
+该文件包含模型、索引路径、检索参数和 LLM 参数。后端运行参数放在 `.env`：
+
+| 变量 | 默认值 | 作用 |
+|---|---:|---|
+| `MATHRAG_ENVIRONMENT` | `development` | 日志中的运行环境标识 |
+| `MATHRAG_LOG_LEVEL` | `INFO` | 后端日志级别 |
+| `MATHRAG_LOG_JSON` | `true` | 使用 JSON 结构化日志 |
+| `MATHRAG_CORS_ORIGINS` | 本地 5173 地址 | 允许的前端来源，逗号分隔 |
+| `MATHRAG_MAX_UPLOAD_MB` | `50` | 单个 PDF 上传上限 |
+| `MATHRAG_MAX_JSON_BODY_MB` | `1` | 普通 API 请求体上限；上传接口单独使用 PDF 上限 |
+| `MATHRAG_SQLITE_TIMEOUT_SECONDS` | `10` | SQLite 锁等待和 busy timeout |
+| `MATHRAG_JOB_MAX_ATTEMPTS` | `3` | 索引任务最大尝试次数 |
+| `MATHRAG_RAG_MAX_CONCURRENCY` | `2` | 同时进入模型流水线的请求数 |
+| `MATHRAG_RAG_ACQUIRE_TIMEOUT_SECONDS` | `2` | 等待推理槽位的最长时间 |
+| `MATHRAG_LLM_TIMEOUT_SECONDS` | `30` | 单次 DeepSeek 请求超时 |
+| `MATHRAG_LLM_MAX_RETRIES` | `2` | SDK 对连接和服务端错误的最大重试次数 |
+
+后端启动时会校验这些变量。数值越界、布尔值拼写错误或未知日志级别会直接阻止启动，避免带着无效配置运行。
 
 ## Backend API
 
@@ -353,6 +378,7 @@ POST /api/documents/upload
 POST /api/index/build
 GET  /api/jobs
 GET  /api/jobs/{job_id}
+POST /api/jobs/{job_id}/retry
 GET  /api/knowledge-bases
 DELETE /api/knowledge-bases/{knowledge_base_id}
 GET  /api/eval/latest?method=hybrid
@@ -370,6 +396,22 @@ POST /api/settings/deepseek-key
 
 接口同时返回 `can_answer_default`、`can_build_index` 和具体阻塞原因，便于在启动后先区分索引、模型与 API 配置问题。
 
+所有 HTTP 响应都会返回 `X-Request-ID`。调用方传入合法的 `X-Request-ID` 时后端会沿用该值，否则自动生成；结构化日志可通过该字段串联一次请求。
+
+错误响应保留原有 `detail` 字段，并提供稳定的错误编码和请求 ID：
+
+```json
+{
+  "detail": "问答服务当前繁忙，请稍后重试",
+  "error": {
+    "code": "service_unavailable",
+    "request_id": "a1b2c3d4"
+  }
+}
+```
+
+未捕获异常不会把数据库路径、密钥或堆栈返回给客户端；服务端日志会保留完整异常并使用同一个 `request_id` 关联。
+
 多知识库构建流程：
 
 ```text
@@ -378,6 +420,8 @@ POST /api/settings/deepseek-key
 3. GET /api/jobs/{job_id} 查询构建进度，status=success 表示完成
 4. POST /api/chat 时传入 knowledge_base_id，基于该知识库问答
 ```
+
+同一文档已经存在 `pending` 或 `running` 任务时，重复调用构建接口会返回原任务，并将 `reused` 设为 `true`。失败任务可调用 `POST /api/jobs/{job_id}/retry`；任务达到最大尝试次数后会返回 `409`。
 
 知识库管理：
 
@@ -408,7 +452,7 @@ data/feedback/mathrag.db
 storage/
 ```
 
-这些文件属于本地运行数据，不提交到 Git。当前后台索引构建使用 FastAPI `BackgroundTasks`，适合本地演示；如果要部署给多人并发使用，建议升级为 Celery/RQ + Redis 队列。
+这些文件属于本地运行数据，不提交到 Git。任务状态、尝试次数和起止时间持久化在 SQLite；服务重启时会将未完成任务标记为失败，用户可以显式重试。当前执行器仍使用 FastAPI `BackgroundTasks`，适合单实例和本地演示；多实例部署应升级为 Celery/RQ + Redis 队列。
 
 ## Frontend
 

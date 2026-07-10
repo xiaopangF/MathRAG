@@ -1,22 +1,54 @@
 import json
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
+from threading import RLock
 from typing import Any
 
-from backend.core.paths import FEEDBACK_DATA_DIR, FEEDBACK_DB_PATH
+from backend.core.paths import FEEDBACK_DB_PATH
+from backend.core.settings import get_settings
+
+
+runtime_settings = get_settings()
 
 
 class FeedbackService:
-    def __init__(self, db_path=FEEDBACK_DB_PATH):
-        self.db_path = db_path
+    def __init__(
+        self,
+        db_path: Path = FEEDBACK_DB_PATH,
+        *,
+        sqlite_timeout_seconds: float | None = None,
+    ):
+        self.db_path = Path(db_path)
+        self.sqlite_timeout_seconds = (
+            sqlite_timeout_seconds
+            if sqlite_timeout_seconds is not None
+            else runtime_settings.sqlite_timeout_seconds
+        )
+        self._db_lock = RLock()
+        self._db_initialized = False
 
     def _connect(self):
-        FEEDBACK_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(self.db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(
+            self.db_path,
+            timeout=self.sqlite_timeout_seconds,
+        )
+        conn.execute(
+            f"PRAGMA busy_timeout = {int(self.sqlite_timeout_seconds * 1000)}"
+        )
+        return conn
 
     def _ensure_db(self) -> None:
-        with self._connect() as conn:
-            conn.execute(
+        if self._db_initialized:
+            return
+        with self._db_lock:
+            if self._db_initialized:
+                return
+            with self._connect() as conn:
+                conn.execute("PRAGMA journal_mode = WAL")
+                conn.execute("PRAGMA synchronous = NORMAL")
+                conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS feedback (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +63,8 @@ class FeedbackService:
                     created_at TEXT NOT NULL
                 )
                 """
-            )
+                )
+            self._db_initialized = True
 
     def save(self, payload: dict[str, Any]) -> int:
         self._ensure_db()

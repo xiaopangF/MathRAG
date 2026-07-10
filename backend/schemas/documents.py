@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DocumentResponse(BaseModel):
@@ -10,7 +10,7 @@ class DocumentResponse(BaseModel):
 
 
 class BuildIndexRequest(BaseModel):
-    document_id: str
+    document_id: str = Field(pattern=r"^doc_[0-9a-f]{12}$")
 
 
 class BuildIndexResponse(BaseModel):
@@ -18,6 +18,7 @@ class BuildIndexResponse(BaseModel):
     document_id: str
     knowledge_base_id: str
     status: str
+    reused: bool = False
 
 
 class JobStatusResponse(BaseModel):
@@ -30,6 +31,9 @@ class JobStatusResponse(BaseModel):
     error: str = ""
     created_at: str = ""
     updated_at: str = ""
+    attempt_count: int = 0
+    started_at: str = ""
+    finished_at: str = ""
     filename: str | None = None
     knowledge_base_name: str | None = None
     knowledge_base_status: str | None = None

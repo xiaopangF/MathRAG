@@ -40,30 +40,27 @@ class LLMGenerationError(RuntimeError):
 class LLMGenerator:
     """大模型生成器"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        timeout_seconds: float | None = None,
+        max_retries: int | None = None,
+    ):
         try:
             from dotenv import load_dotenv
             env_path = Path(__file__).parent.parent.parent / ".env"
             if env_path.exists():
-                load_dotenv(env_path, override=True)
+                load_dotenv(env_path, override=False)
         except Exception:
             pass
 
-        # 直接从环境变量读取（app.py 已经设置好了）
-        self.api_key = os.environ.get("DEEPSEEK_API_KEY")
-        self.base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-
-        if not self.api_key:
-            # 如果环境变量没有，尝试从 .env 加载（兼容直接运行测试）
-            try:
-                from dotenv import load_dotenv
-                env_path = Path(__file__).parent.parent.parent / ".env"
-                if env_path.exists():
-                    load_dotenv(env_path)
-                    self.api_key = os.getenv("DEEPSEEK_API_KEY")
-                    self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-            except Exception:
-                pass
+        self.api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+        self.base_url = (
+            os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").strip()
+            or "https://api.deepseek.com/v1"
+        )
+        self.timeout_seconds = self._resolve_timeout(timeout_seconds)
+        self.max_retries = self._resolve_max_retries(max_retries)
 
         if not self.api_key:
             raise ValueError(
@@ -73,7 +70,9 @@ class LLMGenerator:
 
         self.client = OpenAI(
             api_key=self.api_key,
-            base_url=self.base_url
+            base_url=self.base_url,
+            timeout=self.timeout_seconds,
+            max_retries=self.max_retries,
         )
 
         self.system_prompt = r"""你是一位高等数学助教。请根据提供的教材内容，准确回答学生的问题。
@@ -90,6 +89,28 @@ class LLMGenerator:
      导数 $f'(x)$ 表示函数在 $x$ 点的变化率。
    - 不要用普通括号包裹公式，例如不要写 ( f'(x) )，应写成 $f'(x)$。
 """
+
+    @staticmethod
+    def _resolve_timeout(value: float | None) -> float:
+        if value is None:
+            try:
+                value = float(os.getenv("MATHRAG_LLM_TIMEOUT_SECONDS", "30"))
+            except ValueError as exc:
+                raise ValueError("MATHRAG_LLM_TIMEOUT_SECONDS 必须是数字") from exc
+        if not 1 <= value <= 300:
+            raise ValueError("LLM timeout 必须在 1 到 300 秒之间")
+        return value
+
+    @staticmethod
+    def _resolve_max_retries(value: int | None) -> int:
+        if value is None:
+            try:
+                value = int(os.getenv("MATHRAG_LLM_MAX_RETRIES", "2"))
+            except ValueError as exc:
+                raise ValueError("MATHRAG_LLM_MAX_RETRIES 必须是整数") from exc
+        if not 0 <= value <= 10:
+            raise ValueError("LLM max_retries 必须在 0 到 10 之间")
+        return value
 
     @staticmethod
     def _format_page_range(page_start: Any, page_end: Any) -> str:
@@ -244,7 +265,10 @@ class LLMGenerator:
                 max_tokens=2048,
                 stream=False
             )
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            if not content:
+                raise LLMGenerationError("DeepSeek 返回了空答案，请稍后重试。")
+            return content
         except AuthenticationError as e:
             raise LLMAuthenticationError(
                 "DeepSeek API Key 无效或已失效，请重新复制控制台里的有效 Key。"

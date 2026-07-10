@@ -22,6 +22,11 @@ def test_compose_defines_backend_frontend_and_persistent_model_cache():
     compose = yaml.safe_load((PROJECT_ROOT / "compose.yaml").read_text(encoding="utf-8"))
 
     assert compose["x-backend-environment"]["HF_ENDPOINT"] == "${HF_ENDPOINT:-https://huggingface.co}"
+    assert compose["x-backend-environment"]["MATHRAG_LOG_JSON"] == "${MATHRAG_LOG_JSON:-true}"
+    assert compose["x-backend-environment"]["MATHRAG_JOB_MAX_ATTEMPTS"] == "${MATHRAG_JOB_MAX_ATTEMPTS:-3}"
+    assert compose["x-backend-environment"]["MATHRAG_MAX_JSON_BODY_MB"] == "${MATHRAG_MAX_JSON_BODY_MB:-1}"
+    assert compose["x-backend-environment"]["MATHRAG_LLM_TIMEOUT_SECONDS"] == "${MATHRAG_LLM_TIMEOUT_SECONDS:-30}"
+    assert compose["x-backend-environment"]["MATHRAG_LLM_MAX_RETRIES"] == "${MATHRAG_LLM_MAX_RETRIES:-2}"
     assert {"backend", "frontend", "model-cache"}.issubset(compose["services"])
     assert compose["services"]["frontend"]["depends_on"]["backend"]["condition"] == "service_healthy"
     assert compose["services"]["model-cache"]["profiles"] == ["tools"]

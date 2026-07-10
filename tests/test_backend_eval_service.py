@@ -1,4 +1,6 @@
 from backend.services.eval_service import eval_service
+from backend.services.knowledge_base_service import ResourceConflictError
+from backend.services.rag_service import RAGBusyError
 from backend.api import routes_chat
 from backend.api import routes_documents
 from backend.main import app
@@ -29,6 +31,16 @@ def test_backend_exposes_core_routes():
     assert client.post("/api/documents/upload").status_code == 422
     assert client.post("/api/index/build", json={}).status_code == 422
     assert client.get("/api/settings").status_code == 200
+
+
+def test_request_id_is_preserved_in_response():
+    response = TestClient(app).get(
+        "/health",
+        headers={"X-Request-ID": "test-request-123"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-request-id"] == "test-request-123"
 
 
 def test_knowledge_base_list_route(monkeypatch):
@@ -105,6 +117,24 @@ def test_delete_knowledge_base_route(monkeypatch):
     }
 
 
+def test_delete_building_knowledge_base_returns_conflict(monkeypatch):
+    client = TestClient(app)
+
+    def raise_conflict(knowledge_base_id):
+        raise ResourceConflictError("知识库正在构建，不能删除")
+
+    monkeypatch.setattr(
+        routes_documents.knowledge_base_service,
+        "delete_knowledge_base",
+        raise_conflict,
+    )
+
+    response = client.delete("/api/knowledge-bases/kb_building")
+
+    assert response.status_code == 409
+    assert "正在构建" in response.json()["detail"]
+
+
 def test_deepseek_key_can_be_configured(monkeypatch):
     client = TestClient(app)
 
@@ -177,3 +207,47 @@ def test_chat_returns_503_when_deepseek_connection_fails(monkeypatch):
 
     assert response.status_code == 503
     assert "无法连接" in response.json()["detail"]
+
+
+def test_chat_returns_503_when_rag_capacity_is_exhausted(monkeypatch):
+    client = TestClient(app)
+
+    def raise_busy_error(*args, **kwargs):
+        raise RAGBusyError("问答服务当前繁忙，请稍后重试")
+
+    monkeypatch.setattr(routes_chat.rag_service, "ask", raise_busy_error)
+
+    response = client.post("/api/chat", json={"question": "什么是导数？"})
+
+    assert response.status_code == 503
+    assert "繁忙" in response.json()["detail"]
+
+
+def test_failed_job_retry_route_schedules_background_task(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.setattr(
+        routes_documents.knowledge_base_service,
+        "get_job",
+        lambda job_id: {"job_id": job_id, "status": "failed"},
+    )
+    monkeypatch.setattr(
+        routes_documents.knowledge_base_service,
+        "retry_index_job",
+        lambda job_id: {
+            "job_id": job_id,
+            "document_id": "doc_test",
+            "knowledge_base_id": "kb_test",
+            "status": "pending",
+            "reused": False,
+        },
+    )
+    monkeypatch.setattr(
+        routes_documents.knowledge_base_service,
+        "build_index",
+        lambda job_id: None,
+    )
+
+    response = client.post("/api/jobs/job_test/retry")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "pending"

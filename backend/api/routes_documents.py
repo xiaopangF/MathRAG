@@ -8,7 +8,12 @@ from backend.schemas.documents import (
     JobStatusResponse,
     KnowledgeBaseResponse,
 )
-from backend.services.knowledge_base_service import MAX_UPLOAD_BYTES, knowledge_base_service
+from backend.services.knowledge_base_service import (
+    MAX_UPLOAD_BYTES,
+    ResourceConflictError,
+    knowledge_base_service,
+)
+from backend.services.rag_service import rag_service
 
 
 router = APIRouter(prefix="/api", tags=["documents"])
@@ -30,10 +35,23 @@ async def upload_document(file: UploadFile = File(...)):
 def build_index(request: BuildIndexRequest, background_tasks: BackgroundTasks):
     try:
         job = knowledge_base_service.create_index_job(request.document_id)
-        background_tasks.add_task(knowledge_base_service.build_index, job["job_id"])
+        if job["status"] == "pending":
+            background_tasks.add_task(knowledge_base_service.build_index, job["job_id"])
         return BuildIndexResponse(**job)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/jobs/{job_id}/retry", response_model=BuildIndexResponse)
+def retry_job(job_id: str, background_tasks: BackgroundTasks):
+    if not knowledge_base_service.get_job(job_id):
+        raise HTTPException(status_code=404, detail=f"任务不存在: {job_id}")
+    try:
+        job = knowledge_base_service.retry_index_job(job_id)
+        background_tasks.add_task(knowledge_base_service.build_index, job_id)
+        return BuildIndexResponse(**job)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse)
@@ -65,6 +83,9 @@ def list_knowledge_bases():
 def delete_knowledge_base(knowledge_base_id: str):
     try:
         result = knowledge_base_service.delete_knowledge_base(knowledge_base_id)
+        rag_service.invalidate_knowledge_base(knowledge_base_id)
         return DeleteKnowledgeBaseResponse(**result)
+    except ResourceConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

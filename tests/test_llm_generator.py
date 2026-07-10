@@ -1,3 +1,4 @@
+from src.generation import llm_generator as llm_module
 from src.generation.llm_generator import LLMGenerator
 
 
@@ -51,3 +52,33 @@ def test_format_page_range_supports_single_page_and_ranges():
     assert LLMGenerator._format_page_range(47, 47) == "47"
     assert LLMGenerator._format_page_range(47, 48) == "47-48"
     assert LLMGenerator._format_page_range(None, 48) == ""
+
+
+def test_llm_client_uses_explicit_timeout_and_retries(monkeypatch):
+    captured = {}
+
+    def fake_openai(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "system-key")
+    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    monkeypatch.setattr(llm_module, "OpenAI", fake_openai)
+
+    generator = LLMGenerator(timeout_seconds=12.5, max_retries=4)
+
+    assert generator.api_key == "system-key"
+    assert captured["timeout"] == 12.5
+    assert captured["max_retries"] == 4
+
+
+def test_llm_runtime_limits_are_validated(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("MATHRAG_LLM_TIMEOUT_SECONDS", "0")
+
+    try:
+        LLMGenerator()
+    except ValueError as exc:
+        assert "timeout" in str(exc)
+    else:
+        raise AssertionError("invalid timeout should fail")
