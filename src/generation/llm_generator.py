@@ -5,13 +5,50 @@ MathRAG LLM 生成器
 import os
 from pathlib import Path
 from typing import Any
-from openai import OpenAI
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    BadRequestError,
+    OpenAI,
+    PermissionDeniedError,
+    RateLimitError,
+)
+
+
+class LLMAuthenticationError(RuntimeError):
+    """Raised when the configured LLM API key is rejected by the provider."""
+
+
+class LLMQuotaError(RuntimeError):
+    """Raised when the provider account has no usable quota or balance."""
+
+
+class LLMRateLimitError(RuntimeError):
+    """Raised when the provider rate limit is exceeded."""
+
+
+class LLMConnectionError(RuntimeError):
+    """Raised when the provider cannot be reached."""
+
+
+class LLMGenerationError(RuntimeError):
+    """Raised when the LLM provider request fails for a non-auth reason."""
 
 
 class LLMGenerator:
     """大模型生成器"""
 
     def __init__(self):
+        try:
+            from dotenv import load_dotenv
+            env_path = Path(__file__).parent.parent.parent / ".env"
+            if env_path.exists():
+                load_dotenv(env_path, override=True)
+        except Exception:
+            pass
+
         # 直接从环境变量读取（app.py 已经设置好了）
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
         self.base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
@@ -46,11 +83,12 @@ class LLMGenerator:
 2. 如果上下文中没有相关信息，请直接说"根据当前教材内容，未找到相关解释"。
 3. 回答要清晰、有条理，用中文输出。
 4. 当答案中的结论来自某个参考片段时，请在句末用 [1]、[2] 这样的编号标注来源。
-5. 【公式渲染要求】对于数学公式，请严格使用 LaTeX 格式：
-   - 块级公式（独立成行）：用 $$ ... $$ 包裹，例如：
+5. 【公式渲染要求】对于数学公式，请严格使用 Markdown + LaTeX 格式：
+   - 块级公式（独立成行）：必须用 $$ ... $$ 包裹，例如：
      $$ \int_0^1 x^2 dx = \frac{1}{3} $$
-   - 内联公式（在行内）：用 \( ... \) 包裹，例如：
-     导数 \( f'(x) \) 表示函数在 \( x \) 点的变化率。
+   - 内联公式（在行内）：必须用 $ ... $ 包裹，例如：
+     导数 $f'(x)$ 表示函数在 $x$ 点的变化率。
+   - 不要用普通括号包裹公式，例如不要写 ( f'(x) )，应写成 $f'(x)$。
 """
 
     @staticmethod
@@ -61,6 +99,50 @@ class LLMGenerator:
         if page_end in (None, "") or page_end == page_start:
             return str(page_start)
         return f"{page_start}-{page_end}"
+
+    @staticmethod
+    def _provider_message(error: Exception) -> str:
+        response = getattr(error, "response", None)
+        if response is None:
+            return str(error)
+        try:
+            data = response.json()
+        except Exception:
+            return str(error)
+        provider_error = data.get("error") if isinstance(data, dict) else None
+        if isinstance(provider_error, dict):
+            return str(provider_error.get("message") or provider_error.get("code") or error)
+        return str(error)
+
+    @classmethod
+    def _raise_for_status_error(cls, error: APIStatusError) -> None:
+        status_code = getattr(error, "status_code", None)
+        provider_message = cls._provider_message(error).lower()
+
+        if status_code == 401:
+            raise LLMAuthenticationError(
+                "DeepSeek API Key 无效或已失效，请重新复制控制台里的有效 Key。"
+            ) from error
+        if status_code == 402 or "insufficient" in provider_message or "balance" in provider_message:
+            raise LLMQuotaError(
+                "DeepSeek 账户余额或额度不足，请检查控制台余额、套餐或充值状态。"
+            ) from error
+        if status_code == 403:
+            raise LLMGenerationError(
+                "DeepSeek 请求被拒绝，请检查账号权限、模型权限或 API Key 使用范围。"
+            ) from error
+        if status_code == 429:
+            raise LLMRateLimitError(
+                "DeepSeek 请求过于频繁，已触发限流，请稍后再试。"
+            ) from error
+        if status_code and status_code >= 500:
+            raise LLMGenerationError(
+                "DeepSeek 服务暂时不可用，请稍后重试。"
+            ) from error
+
+        raise LLMGenerationError(
+            f"DeepSeek API 调用失败（HTTP {status_code or 'unknown'}），请检查请求参数和模型配置。"
+        ) from error
 
     @staticmethod
     def _normalize_context(context: Any, index: int) -> dict:
@@ -163,8 +245,30 @@ class LLMGenerator:
                 stream=False
             )
             return response.choices[0].message.content
+        except AuthenticationError as e:
+            raise LLMAuthenticationError(
+                "DeepSeek API Key 无效或已失效，请重新复制控制台里的有效 Key。"
+            ) from e
+        except PermissionDeniedError as e:
+            raise LLMGenerationError(
+                "DeepSeek 请求被拒绝，请检查账号权限、模型权限或 API Key 使用范围。"
+            ) from e
+        except RateLimitError as e:
+            raise LLMRateLimitError(
+                "DeepSeek 请求过于频繁，已触发限流，请稍后再试。"
+            ) from e
+        except (APITimeoutError, APIConnectionError) as e:
+            raise LLMConnectionError(
+                "无法连接 DeepSeek 服务，请检查网络、代理或 DEEPSEEK_BASE_URL。"
+            ) from e
+        except BadRequestError as e:
+            raise LLMGenerationError(
+                "DeepSeek 请求参数不正确，请检查模型名称、上下文长度或 base URL。"
+            ) from e
+        except APIStatusError as e:
+            self._raise_for_status_error(e)
         except Exception as e:
-            return f"❌ 生成答案时出错：{str(e)}"
+            raise LLMGenerationError(f"生成答案时出错：{str(e)}") from e
 
 
 # ---------- 测试 ----------

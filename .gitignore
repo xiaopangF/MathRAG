@@ -20,6 +20,10 @@ __pycache__/
 
 # local app config
 .streamlit/
+backend/data/
+storage/
+frontend/node_modules/
+frontend/dist/
 
 # data and generated files
 data/*

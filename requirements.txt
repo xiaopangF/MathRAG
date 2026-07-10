@@ -1,4 +1,7 @@
-﻿streamlit
+streamlit
+fastapi
+uvicorn
+python-multipart
 python-dotenv
 PyMuPDF
 sentence-transformers
