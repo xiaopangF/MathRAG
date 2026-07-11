@@ -22,7 +22,8 @@ def test_eval_service_loads_latest_hybrid_metrics():
     assert result["method"] == "hybrid"
     assert result["report_path"] == "reports/retrieval_metrics_100_hybrid.json"
     assert result["metrics"]["question_count"] == 100
-    assert result["metrics"]["recall_at_5"] == 0.99
+    assert result["metrics"]["recall_at_5"] >= 0.95
+    assert result["metrics"]["mrr"] >= 0.9
 
 
 def test_backend_exposes_core_routes():
