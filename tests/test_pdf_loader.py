@@ -339,14 +339,16 @@ def get_test_pdf_path() -> Path:
     for p in candidates:
         if p.exists():
             return p
-    return None
+
+    generated_pdf = base / ".pytest_tmp" / "integration" / "test.pdf"
+    generated_pdf.parent.mkdir(parents=True, exist_ok=True)
+    create_layout_pdf(generated_pdf, page_count=2)
+    return generated_pdf
 
 
 @pytest.mark.integration
 def test_extract_pages_with_pdf():
     pdf_path = get_test_pdf_path()
-    if pdf_path is None:
-        pytest.skip("没有可用的测试 PDF，跳过集成测试")
     loader = PDFLoader(pdf_path)
     pages = loader.extract_pages()
     assert len(pages) > 0
@@ -357,8 +359,6 @@ def test_extract_pages_with_pdf():
 @pytest.mark.integration
 def test_extract_full_text():
     pdf_path = get_test_pdf_path()
-    if pdf_path is None:
-        pytest.skip("没有可用的测试 PDF，跳过集成测试")
     loader = PDFLoader(pdf_path)
     full_text = loader.extract_full_text(add_page_marker=True)
     assert "[PAGE" in full_text
@@ -369,8 +369,6 @@ def test_extract_full_text():
 @pytest.mark.integration
 def test_save_to_txt(tmp_path):
     pdf_path = get_test_pdf_path()
-    if pdf_path is None:
-        pytest.skip("没有可用的测试 PDF，跳过集成测试")
     loader = PDFLoader(pdf_path)
     out_file = tmp_path / "output.txt"
     loader.save_to_txt(out_file)
