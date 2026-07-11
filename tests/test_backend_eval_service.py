@@ -25,12 +25,17 @@ def test_eval_service_loads_latest_hybrid_metrics():
     assert result["metrics"]["recall_at_5"] >= 0.95
     assert result["metrics"]["mrr"] >= 0.9
 
+    grounded = eval_service.latest("grounded_sample")
+    assert grounded["metrics"]["page_metrics"]["recall_at_5"] == 1.0
+    assert grounded["metrics"]["section_metrics"]["recall_at_5"] == 0.8
+
 
 def test_backend_exposes_core_routes():
     client = TestClient(app)
 
     assert client.get("/health").status_code == 200
     assert client.get("/api/eval/latest?method=hybrid").status_code == 200
+    assert client.get("/api/eval/latest?method=grounded_sample").status_code == 200
     assert client.post("/api/chat", json={}).status_code == 422
     assert client.post("/api/documents/upload").status_code == 422
     assert client.post("/api/index/build", json={}).status_code == 422

@@ -1,0 +1,122 @@
+{
+  "eval_path": "eval/questions.sample.jsonl",
+  "index_dir": "data/faiss_index",
+  "question_count": 5,
+  "evaluated_count": 5,
+  "retrieved_question_count": 5,
+  "skipped_count": 0,
+  "top_k": 5,
+  "top_k_embedding": 20,
+  "top_k_bm25": 20,
+  "rerank_batch_size": 64,
+  "use_hybrid_search": true,
+  "recall_at_1": 0.8,
+  "recall_at_3": 1.0,
+  "recall_at_5": 1.0,
+  "mrr": 0.9,
+  "hits": {
+    "hit_at_1": 4,
+    "hit_at_3": 5,
+    "hit_at_5": 5
+  },
+  "keyword_metrics": {
+    "evaluated_count": 5,
+    "recall_at_1": 0.8,
+    "recall_at_3": 1.0,
+    "recall_at_5": 1.0,
+    "mrr": 0.9,
+    "hits": {
+      "hit_at_1": 4,
+      "hit_at_3": 5,
+      "hit_at_5": 5
+    }
+  },
+  "page_metrics": {
+    "evaluated_count": 5,
+    "recall_at_1": 0.6,
+    "recall_at_3": 1.0,
+    "recall_at_5": 1.0,
+    "mrr": 0.7666666666666667,
+    "hits": {
+      "hit_at_1": 3,
+      "hit_at_3": 5,
+      "hit_at_5": 5
+    }
+  },
+  "section_metrics": {
+    "evaluated_count": 5,
+    "recall_at_1": 0.4,
+    "recall_at_3": 0.6,
+    "recall_at_5": 0.8,
+    "mrr": 0.55,
+    "hits": {
+      "hit_at_1": 2,
+      "hit_at_3": 3,
+      "hit_at_5": 4
+    }
+  },
+  "failed_cases": [],
+  "page_failed_cases": [],
+  "section_failed_cases": [
+    {
+      "id": "q005",
+      "question": "拉格朗日中值定理的条件是什么？",
+      "expected_sections": [
+        "拉格朗日定理",
+        "微分中值定理"
+      ],
+      "top_results": [
+        {
+          "rank": 1,
+          "title": "定理要求证明：#!$（&，’）满足导函数方程",
+          "chapter": "",
+          "section": "",
+          "page_start": 158,
+          "page_end": 159,
+          "score": 0.9956392049789429,
+          "preview": "\"’（#）$\"（’）$\"（&）\n\n’$&\n\"!，\n\n即\n\n\"（#）$\"（’）$\"（&）\n\n’$&\n［\n］\n#\n\n’\n\n\"!，\n\n由此，只要令!（#）\"\"（#）$\"（’）$\"（&）\n\n’$&\n#，问题就转化为证明!（#）是否满\n\n足罗尔定理%\n\n证\n作辅助函数\n\n!（#）\"\"（#）$\"（’）$\"（&）\n\n’$&\n#，\n\n..."
+        },
+        {
+          "rank": 2,
+          "title": "(2) 当n = 0 时,在定理1 中公式为",
+          "chapter": "",
+          "section": "",
+          "page_start": 484,
+          "page_end": 484,
+          "score": 0.9954389929771423,
+          "preview": "f( x0 + h, y0 + k) = f( x0 , y0 ) + hfx ( x0 + θh, y0 + θk)\n\n+ kfy( x0 + θh, y0 + θk),\n\n这个公式称为二元函数的拉格朗日中值公式.\n\n由此可见,函数f( x, y)的偏导数fx ( x, y), fy ( x, y)在某一区域内都恒等..."
+        },
+        {
+          "rank": 3,
+          "title": "例! 设\"（&）\"’［$，#］#(（$，#）",
+          "chapter": "",
+          "section": "",
+          "page_start": 162,
+          "page_end": 162,
+          "score": 0.9929934144020081,
+          "preview": "（$$$），证明：%!\"（$，#）使’!［\"（#）\n\n#\"（$）］\"（#\n\n’）\"!（!）%\n\n’#$\n\n证\n所证问题可化为\"（#）#\"（$）\n\n’\n\"\"!（!）\n\n，因此可令%（&）\"&\n\n’，则在（$，\n\n’#$\n\n’!\n\n#\n\n#）内%!（&）\"’&!$，\"（&）与%（&）在［$，#］上满足柯西定理的条件，则有\n..."
+        },
+        {
+          "rank": 4,
+          "title": "定理得",
+          "chapter": "",
+          "section": "",
+          "page_start": 162,
+          "page_end": 164,
+          "score": 0.9918349981307983,
+          "preview": "\"（#）#\"（$）\n%（#）#%（$）\"\"!（!）\n（##$）\n%!（!）\n（##$）\"\"!（!）\n\n%!（!），!\"（$，#）\n\n’&，\n&$\n｛\n&\n\n*%设\"（&）\" &\n’+&，&&&\n\n，这样求\"!（&）对不对？\n\n当&’&时，\"!（&）\"’&，\"!#（&）\",-.\n\n&(&#\"!（&）\",-.\n\n&(&#’..."
+        },
+        {
+          "rank": 5,
+          "title": "三、条件极值 拉格朗日乘数法",
+          "chapter": "",
+          "section": "",
+          "page_start": 417,
+          "page_end": 417,
+          "score": 0.9851404428482056,
+          "preview": "⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯\n\n思考题5. 9\n⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯⋯..."
+        }
+      ]
+    }
+  ]
+}

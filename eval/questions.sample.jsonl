@@ -1,5 +1,5 @@
-{"id": "q001", "question": "什么是导数？", "expected_keywords": ["导数", "极限", "变化率"], "expected_chunk_keywords": ["导数", "变化率", "切线斜率"], "type": "definition", "difficulty": "easy"}
-{"id": "q002", "question": "洛必达法则的适用条件是什么？", "expected_keywords": ["未定式", "可导", "极限"], "expected_chunk_keywords": ["洛必达法则", "可导", "0/0"], "type": "theorem", "difficulty": "medium"}
-{"id": "q003", "question": "牛顿-莱布尼茨公式是什么？", "expected_keywords": ["定积分", "原函数", "公式"], "expected_chunk_keywords": ["牛顿-莱布尼茨", "原函数", "定积分"], "type": "formula", "difficulty": "easy"}
-{"id": "q004", "question": "导数的几何意义是什么？", "expected_keywords": ["切线", "斜率", "导数"], "expected_chunk_keywords": ["几何意义", "切线", "斜率"], "type": "concept", "difficulty": "easy"}
-{"id": "q005", "question": "拉格朗日中值定理的条件是什么？", "expected_keywords": ["连续", "可导", "中值定理"], "expected_chunk_keywords": ["拉格朗日", "连续", "可导"], "type": "theorem", "difficulty": "medium"}
+{"id": "q001", "question": "什么是导数？", "expected_keywords": ["导数", "极限", "变化率"], "expected_chunk_keywords": ["导数", "变化率", "切线斜率"], "expected_page_ranges": [109], "expected_sections": ["二、导数的定义"], "type": "definition", "difficulty": "easy"}
+{"id": "q002", "question": "洛必达法则的适用条件是什么？", "expected_keywords": ["未定式", "可导", "极限"], "expected_chunk_keywords": ["洛必达法则", "可导", "0/0"], "expected_page_ranges": [[164, 165]], "expected_sections": ["洛必达法则"], "type": "theorem", "difficulty": "medium"}
+{"id": "q003", "question": "牛顿-莱布尼茨公式是什么？", "expected_keywords": ["定积分", "原函数", "公式"], "expected_chunk_keywords": ["牛顿-莱布尼茨", "原函数", "定积分"], "expected_page_ranges": [239], "expected_sections": ["牛顿-莱布尼茨", "微积分基本定理"], "type": "formula", "difficulty": "easy"}
+{"id": "q004", "question": "导数的几何意义是什么？", "expected_keywords": ["切线", "斜率", "导数"], "expected_chunk_keywords": ["几何意义", "切线", "斜率"], "expected_page_ranges": [113], "expected_sections": ["四、导数的几何意义"], "type": "concept", "difficulty": "easy"}
+{"id": "q005", "question": "拉格朗日中值定理的条件是什么？", "expected_keywords": ["连续", "可导", "中值定理"], "expected_chunk_keywords": ["拉格朗日", "连续", "可导"], "expected_page_ranges": [158], "expected_sections": ["拉格朗日定理", "微分中值定理"], "type": "theorem", "difficulty": "medium"}

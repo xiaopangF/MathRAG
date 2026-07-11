@@ -8,7 +8,12 @@ router = APIRouter(prefix="/api/eval", tags=["evaluation"])
 
 
 @router.get("/latest", response_model=EvalLatestResponse)
-def latest_eval(method: str = Query(default="hybrid", pattern="^(hybrid|vector_only)$")):
+def latest_eval(
+    method: str = Query(
+        default="hybrid",
+        pattern="^(hybrid|vector_only|grounded_sample)$",
+    ),
+):
     try:
         return eval_service.latest(method=method)
     except ValueError as exc:

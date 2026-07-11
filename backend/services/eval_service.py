@@ -8,6 +8,7 @@ from backend.core.paths import PROJECT_ROOT, REPORTS_DIR
 REPORT_BY_METHOD = {
     "hybrid": REPORTS_DIR / "retrieval_metrics_100_hybrid.json",
     "vector_only": REPORTS_DIR / "retrieval_metrics_100_vector_only.json",
+    "grounded_sample": REPORTS_DIR / "retrieval_metrics_grounded_sample.json",
 }
 
 

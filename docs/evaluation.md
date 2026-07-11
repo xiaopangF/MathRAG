@@ -13,12 +13,18 @@
 - `Recall@5`：正确片段是否出现在前 5 个结果中
 - `MRR`：第一个命中结果的倒数排名均值
 
+评测器分别计算三类命中信号：
+
+- 关键词：输出在顶层 `recall_at_*`，兼容已有报告和前端
+- 页码：输出在 `page_metrics`，判断检索片段页码与标注范围是否重叠
+- 章节：输出在 `section_metrics`，匹配结果的章、节或标题元数据
+
 ## 数据格式
 
 评测文件使用 JSONL，每行一个问题：
 
 ```json
-{"id": "q001", "question": "什么是导数？", "expected_keywords": ["导数", "极限", "变化率"], "expected_chunk_keywords": ["导数", "变化率", "切线斜率"], "type": "definition", "difficulty": "easy"}
+{"id": "q001", "question": "什么是导数？", "expected_keywords": ["导数", "极限", "变化率"], "expected_chunk_keywords": ["导数", "变化率", "切线斜率"], "expected_page_ranges": [109], "expected_sections": ["二、导数的定义"], "type": "definition", "difficulty": "easy"}
 ```
 
 字段说明：
@@ -27,10 +33,21 @@
 - `question`：用户问题
 - `expected_keywords`：答案中期望出现的关键词，用于后续生成质量评估
 - `expected_chunk_keywords`：正确检索片段中应出现的关键词，用于当前检索评测
+- `expected_page_ranges`：可选，正确 PDF 物理页码；支持单页 `109` 或范围 `[164, 165]`
+- `expected_sections`：可选，正确的章、节或标题；可以提供多个教材原文别名
 - `type`：问题类型，例如 `definition`、`theorem`、`formula`、`method`
 - `difficulty`：难度，例如 `easy`、`medium`、`hard`
 
-当前脚本优先使用 `expected_chunk_keywords` 判断检索命中；如果缺少该字段，会退回使用 `expected_keywords`。
+当前脚本优先使用 `expected_chunk_keywords` 判断关键词命中；如果缺少该字段，会退回使用 `expected_keywords`。页码和章节标注是可选字段，没有标注时不会计入对应指标的分母。
+
+## 页码与章节标注规范
+
+- 页码使用解析产物中的 1-based PDF 物理页码，不使用教材页脚印刷页码
+- 连续内容使用范围，例如 `[[164, 165]]`；多个离散位置可以写成 `[109, [164, 165]]`
+- 页码命中采用范围重叠，只要检索片段覆盖任一标注页即可
+- 章节优先填写教材原文标题，例如 `二、导数的定义`
+- OCR 存在异体字或标点差异时，可以提供多个可接受标题
+- 页码和章节应从 `data/processed/pages.jsonl` 或原 PDF 人工核验，不能直接复制检索结果作为真值
 
 ## 关键词标注规范
 
@@ -118,19 +135,23 @@ python evaluate_retrieval.py --no-hybrid-search
 | BM25 + BGE + Reranker | 100 | - | - | - | - |
 ```
 
-当前本地 100 题评测结果：
+当前 v0.4.1 默认索引的 100 题严格关键词评测结果：
 
 | Method | Questions | Recall@1 | Recall@3 | Recall@5 | MRR |
 |---|---:|---:|---:|---:|---:|
-| BGE Embedding + Reranker | 100 | 85.00% | 95.00% | 96.00% | 0.8987 |
-| BM25 + BGE + Reranker | 100 | 88.00% | 97.00% | 99.00% | 0.9262 |
+| BM25 + BGE + Reranker | 100 | 86.00% | 97.00% | 97.00% | 0.9117 |
 
 对应 JSON 结果保存在：
 
 ```text
 reports/retrieval_metrics_100_vector_only.json
 reports/retrieval_metrics_100_hybrid.json
+reports/retrieval_metrics_grounded_sample.json
 ```
+
+其中 `retrieval_metrics_grounded_sample.json` 使用 5 条人工核验的页码和章节标注。当前 Recall@5 为：关键词 100%、页码 100%、章节 80%；章节失败案例用于验证后续父子块 metadata 继承优化。
+
+后端运行后可以通过 `GET /api/eval/latest?method=grounded_sample` 读取该结构化基线；原有 `hybrid` 和 `vector_only` 方法保持兼容。
 
 后续可以加入对比实验：
 
