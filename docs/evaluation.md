@@ -120,7 +120,7 @@ python validate_eval_dataset.py --eval-path data/eval/questions.grounded.dev.jso
 python validate_eval_dataset.py --eval-path data/eval/questions.grounded.locked.jsonl --profile grounded-locked
 ```
 
-`grounded-*` profile 会要求每题都有 `expected_page_ranges` 和 `expected_sections`。这些字段必须来自原 PDF 或 `data/processed/pages.jsonl` 的人工核验，不能直接复制检索结果作为真值。
+`grounded-*` profile 会要求每个可回答问题都有 `expected_page_ranges` 和 `expected_sections`。这些字段必须来自原 PDF 或 `data/processed/pages.jsonl` 的人工核验，不能直接复制检索结果作为真值。`out_of_scope` / `unanswerable` 题必须设置 `expected_answerable: false`，它们用于检查系统拒答能力，不参与检索 Recall 的分母。
 
 ## 推荐题型比例
 

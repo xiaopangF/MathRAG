@@ -32,6 +32,7 @@ data/*
 !data/eval/
 data/eval/*
 !data/eval/questions.jsonl
+!data/eval/questions.grounded.dev.jsonl
 reports/*
 !reports/
 !reports/retrieval_metrics_100_hybrid.json

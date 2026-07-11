@@ -51,6 +51,7 @@ jobs:
         run: |
           python validate_eval_dataset.py --eval-path eval/questions.sample.jsonl --profile grounded-smoke
           python validate_eval_dataset.py --eval-path data/eval/questions.jsonl --profile keyword-100
+          python validate_eval_dataset.py --eval-path data/eval/questions.grounded.dev.jsonl --profile grounded-dev
 
       - name: Run unit tests
         id: unit-tests

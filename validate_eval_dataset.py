@@ -109,6 +109,11 @@ def _is_nonempty_string(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def is_answerable(item: dict[str, Any]) -> bool:
+    """Return whether the item is expected to have supporting textbook evidence."""
+    return item.get("expected_answerable", True) is not False
+
+
 def validate_eval_dataset(
     path: str | Path,
     profile: str = "grounded-smoke",
@@ -124,6 +129,7 @@ def validate_eval_dataset(
     type_counts: Counter[str] = Counter()
     family_counts: Counter[str] = Counter()
     difficulty_counts: Counter[str] = Counter()
+    answerable_count = 0
     grounded_count = 0
 
     min_questions = int(rules["min_questions"])
@@ -157,8 +163,12 @@ def validate_eval_dataset(
             else:
                 seen_questions[normalized_question] = line_no
 
+        answerable = is_answerable(item)
+        if answerable:
+            answerable_count += 1
+
         expected_keywords = get_expected_keywords(item)
-        if not expected_keywords:
+        if answerable and not expected_keywords:
             errors.append(
                 f"line {line_no}: expected_chunk_keywords or expected_keywords is required"
             )
@@ -173,6 +183,14 @@ def validate_eval_dataset(
             family_counts[family] += 1
             if family == "unknown":
                 errors.append(f"line {line_no}: unknown type {item_type!r}")
+            if family == "out_of_scope" and answerable:
+                errors.append(
+                    f"line {line_no}: out_of_scope items must set expected_answerable to false"
+                )
+            if family != "out_of_scope" and not answerable:
+                errors.append(
+                    f"line {line_no}: only out_of_scope items may set expected_answerable to false"
+                )
 
         difficulty = item.get("difficulty")
         if difficulty is not None:
@@ -189,10 +207,10 @@ def validate_eval_dataset(
             page_ranges = []
             sections = []
 
-        if page_ranges and sections:
+        if answerable and page_ranges and sections:
             grounded_count += 1
 
-        if rules["require_grounded"]:
+        if answerable and rules["require_grounded"]:
             if not page_ranges:
                 errors.append(f"line {line_no}: expected_page_ranges is required")
             if not sections:
@@ -209,6 +227,7 @@ def validate_eval_dataset(
         "path": str(path),
         "profile": profile,
         "question_count": len(items),
+        "answerable_count": answerable_count,
         "grounded_count": grounded_count,
         "type_counts": dict(sorted(type_counts.items())),
         "family_counts": dict(sorted(family_counts.items())),
@@ -221,6 +240,7 @@ def print_summary(summary: dict[str, Any]) -> None:
     print(f"Dataset: {summary['path']}")
     print(f"Profile: {summary['profile']}")
     print(f"Questions: {summary['question_count']}")
+    print(f"Answerable: {summary['answerable_count']}")
     print(f"Grounded: {summary['grounded_count']}")
     print(f"Type families: {summary['family_counts']}")
 
