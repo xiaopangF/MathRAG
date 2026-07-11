@@ -183,11 +183,14 @@ python evaluate_retrieval.py --no-hybrid-search
 reports/retrieval_metrics_100_vector_only.json
 reports/retrieval_metrics_100_hybrid.json
 reports/retrieval_metrics_grounded_sample.json
+reports/retrieval_metrics_grounded_dev.json
 ```
 
 其中 `retrieval_metrics_grounded_sample.json` 使用 5 条人工核验的页码和章节标注。历史 Recall@5 为：关键词 100%、页码 100%、章节 80%。当前切分器已让定义、定理和例题块继承章/节 metadata，并将结构上下文用于索引和重排；该修复只对新索引生效。仓库未包含原 PDF，因此历史报告保持不变，取得原教材后需要重建默认索引并重新运行 grounded 评测。
 
-后端运行后可以通过 `GET /api/eval/latest?method=grounded_sample` 读取该结构化基线；原有 `hybrid` 和 `vector_only` 方法保持兼容。
+`retrieval_metrics_grounded_dev.json` 使用 30 条 grounded-dev 评测题，其中 28 条可回答题参与检索指标、2 条 `out_of_scope` 题用于拒答评测。当前重建索引后的 Recall@5 为：关键词 100%、页码 100%、章节 96.43%。
+
+后端运行后可以通过 `GET /api/eval/latest?method=grounded_sample` 或 `GET /api/eval/latest?method=grounded_dev` 读取结构化基线；原有 `hybrid` 和 `vector_only` 方法保持兼容。
 
 后续可以加入对比实验：
 

@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/eval", tags=["evaluation"])
 def latest_eval(
     method: str = Query(
         default="hybrid",
-        pattern="^(hybrid|vector_only|grounded_sample)$",
+        pattern="^(hybrid|vector_only|grounded_sample|grounded_dev)$",
     ),
 ):
     try:

@@ -37,6 +37,7 @@ reports/*
 !reports/
 !reports/retrieval_metrics_100_hybrid.json
 !reports/retrieval_metrics_100_vector_only.json
+!reports/retrieval_metrics_grounded_dev.json
 !reports/retrieval_metrics_grounded_sample.json
 
 # model / index artifacts

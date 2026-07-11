@@ -383,6 +383,7 @@ Copy-Item eval/questions.sample.jsonl data/eval/questions.jsonl
 reports/retrieval_metrics_100_vector_only.json
 reports/retrieval_metrics_100_hybrid.json
 reports/retrieval_metrics_grounded_sample.json
+reports/retrieval_metrics_grounded_dev.json
 ```
 
 提交或扩展评测集前先运行结构校验：
