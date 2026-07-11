@@ -28,6 +28,21 @@ from src.retriever.bm25_retriever import BM25Retriever
 from src.loader.math_text import build_math_search_text
 
 
+def build_ranking_text(content: str, metadata: dict[str, Any]) -> str:
+    """Add structural context for ranking without changing displayed content."""
+    title = str(metadata.get("title") or "").strip()
+    return f"{title}\n{content}" if title else content
+
+
+def load_model_cache_first(factory, model_name: str, label: str):
+    """Load cached model files first, then allow a remote download if absent."""
+    try:
+        return factory(model_name, local_files_only=True)
+    except (OSError, RuntimeError):
+        print(f"   本地未找到完整的 {label} 缓存，尝试联网加载")
+        return factory(model_name)
+
+
 # ============ 配置类 ============
 @dataclass
 class RAGConfig:
@@ -104,10 +119,18 @@ class MathRAGRetriever:
 
     def _load_models(self):
         print(f"🚀 加载 Embedding 模型: {self.config.embedding_model}")
-        self.embed_model = SentenceTransformer(self.config.embedding_model)
+        self.embed_model = load_model_cache_first(
+            SentenceTransformer,
+            self.config.embedding_model,
+            "Embedding 模型",
+        )
 
         print(f"🚀 加载 Reranker 模型: {self.config.reranker_model}")
-        self.reranker = CrossEncoder(self.config.reranker_model)
+        self.reranker = load_model_cache_first(
+            CrossEncoder,
+            self.config.reranker_model,
+            "Reranker 模型",
+        )
 
         # GPU 支持（自动检测可用性）
         if self.config.use_gpu:
@@ -290,7 +313,10 @@ class MathRAGRetriever:
             return []
 
         # ---------- 第二阶段：Reranker 精排 ----------
-        pairs = [(query, c["content"]) for c in candidates]
+        pairs = [
+            (query, build_ranking_text(c["content"], c["metadata"]))
+            for c in candidates
+        ]
         rerank_scores = self.reranker.predict(
             pairs,
             batch_size=self.config.rerank_batch_size,
@@ -325,7 +351,11 @@ class MathRAGRetriever:
         if top_k is None:
             top_k = self.config.top_k_rerank
 
-        query_embs = self.embed_model.encode(queries, normalize_embeddings=True)
+        search_queries = [build_math_search_text(query) for query in queries]
+        query_embs = self.embed_model.encode(
+            search_queries,
+            normalize_embeddings=True,
+        )
         query_embs = np.asarray(query_embs, dtype=np.float32)
 
         all_scores, all_indices = self.index.search(query_embs, self.config.top_k_embedding)
@@ -354,7 +384,10 @@ class MathRAGRetriever:
 
             candidates = list(candidates_by_id.values())
             start = len(all_pairs)
-            all_pairs.extend((q, c["content"]) for c in candidates)
+            all_pairs.extend(
+                (q, build_ranking_text(c["content"], c["metadata"]))
+                for c in candidates
+            )
             end = len(all_pairs)
             pair_ranges.append((start, end))
             batch_candidates.append(candidates)

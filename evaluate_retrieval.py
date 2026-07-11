@@ -70,6 +70,13 @@ def is_hit(content: str, expected_keywords: list[str]) -> bool:
     )
 
 
+def result_match_text(result: Any) -> str:
+    """Combine structural metadata and content for retrieval evaluation."""
+    title = str(getattr(result, "title", "") or "").strip()
+    content = str(getattr(result, "content", "") or "")
+    return f"{title}\n{content}" if title else content
+
+
 def evaluate_retrieval(
     eval_path: str | Path = "data/eval/questions.jsonl",
     index_dir: str | Path = "data/faiss_index",
@@ -135,7 +142,7 @@ def evaluate_retrieval(
 
         rank = None
         for i, result in enumerate(results, start=1):
-            if is_hit(result.content, expected):
+            if is_hit(result_match_text(result), expected):
                 rank = i
                 break
 

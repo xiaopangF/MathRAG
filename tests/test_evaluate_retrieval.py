@@ -1,4 +1,11 @@
-from evaluate_retrieval import get_expected_keywords, is_hit, normalize_for_match
+from types import SimpleNamespace
+
+from evaluate_retrieval import (
+    get_expected_keywords,
+    is_hit,
+    normalize_for_match,
+    result_match_text,
+)
 
 
 def test_get_expected_keywords_prefers_chunk_keywords():
@@ -31,3 +38,10 @@ def test_is_hit_returns_false_when_no_keyword_matches():
     content = "函数在该区间内连续。"
 
     assert not is_hit(content, ["洛必达法则"])
+
+
+def test_result_match_text_includes_title_without_changing_content():
+    result = SimpleNamespace(title="数列极限与函数极限的关系", content="两者可以互相转化。")
+
+    assert is_hit(result_match_text(result), ["数列极限与函数极限的关系"])
+    assert result.content == "两者可以互相转化。"

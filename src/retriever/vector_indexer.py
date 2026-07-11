@@ -130,10 +130,12 @@ def load_chunks_from_folder(
                 "chunk_type": "text",
             }
 
+        title = str(meta.get("title") or "").strip()
+        retrieval_text = f"{title}\n{content}" if title else content
         meta.update({
             "file": str(file_path).replace("\\", "/"),
             "char_count": len(content),
-            "search_text": build_math_search_text(content),
+            "search_text": build_math_search_text(retrieval_text),
         })
 
         texts.append(content)
