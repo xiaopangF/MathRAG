@@ -86,6 +86,42 @@ Copy-Item eval/questions.sample.jsonl data/eval/questions.jsonl
 
 `data/` 默认不提交到 Git，适合放本地教材、索引和完整评测集。如果要公开一部分评测题，可以补充到 `eval/questions.sample.jsonl`。
 
+## 评测集分层
+
+5 条 grounded 样例只能作为 smoke test，用来确认流程、字段和报告没有坏。它不适合判断模型或检索策略是否真的变好，因为每错 1 题都会造成 20 个百分点的波动。
+
+建议维护三层评测集：
+
+| Profile | 建议路径 | 题量 | 用途 |
+|---|---|---:|---|
+| `grounded-smoke` | `eval/questions.sample.jsonl` | >= 5 | PR 和本地快速验收 |
+| `grounded-dev` | `data/eval/questions.grounded.dev.jsonl` | >= 30 | 日常调参、切分策略和 rerank 对比 |
+| `grounded-locked` | `data/eval/questions.grounded.locked.jsonl` | >= 100 | 发布前固定基准，不随实验调整 |
+| `keyword-100` | `data/eval/questions.jsonl` | >= 100 | 兼容历史关键词检索基线 |
+
+`grounded-dev` 建议至少覆盖：
+
+- 概念/定义：6 题
+- 定理/条件：6 题
+- 公式：4 题
+- 方法/应用：6 题
+- 跨章节综合：3 题
+- 易错/反例：3 题
+- 超出教材范围：2 题
+
+对应的 `type` 可以使用：`definition`、`concept`、`property`、`theorem`、`formula`、`method`、`application`、`cross_section`、`multi_hop`、`trap`、`counterexample`、`edge_case`、`out_of_scope`、`unanswerable`。
+
+提交或运行评测前先校验数据：
+
+```powershell
+python validate_eval_dataset.py --eval-path eval/questions.sample.jsonl --profile grounded-smoke
+python validate_eval_dataset.py --eval-path data/eval/questions.jsonl --profile keyword-100
+python validate_eval_dataset.py --eval-path data/eval/questions.grounded.dev.jsonl --profile grounded-dev
+python validate_eval_dataset.py --eval-path data/eval/questions.grounded.locked.jsonl --profile grounded-locked
+```
+
+`grounded-*` profile 会要求每题都有 `expected_page_ranges` 和 `expected_sections`。这些字段必须来自原 PDF 或 `data/processed/pages.jsonl` 的人工核验，不能直接复制检索结果作为真值。
+
 ## 推荐题型比例
 
 第一版建议整理 100 条问题：
