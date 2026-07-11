@@ -25,6 +25,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 from src.retriever.bm25_retriever import BM25Retriever
+from src.loader.math_text import build_math_search_text
 
 
 # ============ 配置类 ============
@@ -175,7 +176,8 @@ class MathRAGRetriever:
 
     def _encode_query(self, query: str) -> np.ndarray:
         """编码查询并强制转为 float32"""
-        emb = self.embed_model.encode([query], normalize_embeddings=True)
+        search_query = build_math_search_text(query)
+        emb = self.embed_model.encode([search_query], normalize_embeddings=True)
         return np.asarray(emb, dtype=np.float32)
 
     def _get_cache_key(self, query: str, top_k: int) -> str:

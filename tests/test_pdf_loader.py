@@ -75,6 +75,30 @@ def create_image_only_pdf(path: Path, page_count: int = 1) -> None:
     source.close()
 
 
+def create_table_pdf(path: Path) -> None:
+    document = fitz.open()
+    page = document.new_page()
+    x_positions = [72, 220, 368]
+    y_positions = [100, 140, 180]
+    for x_position in x_positions:
+        page.draw_line(
+            (x_position, y_positions[0]),
+            (x_position, y_positions[-1]),
+        )
+    for y_position in y_positions:
+        page.draw_line(
+            (x_positions[0], y_position),
+            (x_positions[-1], y_position),
+        )
+    page.insert_text((82, 125), "Variable")
+    page.insert_text((230, 125), "Value")
+    page.insert_text((82, 165), "x")
+    page.insert_text((230, 165), "x^2")
+    page.wrap_contents()
+    document.save(path)
+    document.close()
+
+
 def test_extract_pages_removes_repeated_headers_and_footers(tmp_path):
     pdf_path = tmp_path / "layout.pdf"
     create_layout_pdf(pdf_path)
@@ -261,6 +285,46 @@ def test_page_jsonl_and_extraction_summary_include_layout_metadata(tmp_path):
     assert first_page["blocks"]
     assert summary["source"] == "metadata.pdf"
     assert summary["layouts"]
+
+
+def test_table_detection_replaces_duplicate_cell_text_with_markdown(tmp_path):
+    pdf_path = tmp_path / "table.pdf"
+    create_table_pdf(pdf_path)
+
+    with PDFLoader(pdf_path, table_detection_enabled=True) as loader:
+        page = loader.extract_pages()[0]
+        summary = loader.extraction_summary()
+
+    assert page["table_count"] == 1
+    assert page["tables"][0]["cells"] == [
+        ["Variable", "Value"],
+        ["x", "x^2"],
+    ]
+    assert "|Variable|Value|" in page["text"]
+    assert page["text"].count("Variable") == 1
+    assert any(block["role"] == "table" for block in page["blocks"])
+    assert any(
+        block["excluded_reason"] == "table_replaced"
+        for block in page["blocks"]
+    )
+    assert summary["table_count"] == 1
+    assert summary["table_pages"] == [1]
+
+
+def test_formula_blocks_are_classified_and_counted(tmp_path):
+    pdf_path = tmp_path / "formula.pdf"
+    document = fitz.open()
+    page = document.new_page()
+    page.insert_text((72, 120), "f(x) = x^2 + 2*x + 1")
+    document.save(pdf_path)
+    document.close()
+
+    with PDFLoader(pdf_path) as loader:
+        page = loader.extract_pages()[0]
+        summary = loader.extraction_summary()
+
+    assert page["blocks"][0]["role"] == "formula_candidate"
+    assert summary["formula_block_count"] == 1
 
 
 # ========== 集成测试（需要实际 PDF） ==========

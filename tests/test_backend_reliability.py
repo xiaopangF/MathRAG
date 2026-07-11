@@ -66,6 +66,27 @@ def test_save_document_persists_sanitized_pdf(tmp_path, monkeypatch):
     assert service.get_document(record["document_id"])["filename"] == "高数_教材_.pdf"
 
 
+def test_document_path_is_repaired_across_host_and_container_paths(
+    tmp_path,
+    monkeypatch,
+):
+    service = make_service(tmp_path, monkeypatch)
+    record = service.save_document(make_upload(), b"%PDF-1.7\ncontent")
+    legacy_path = rf"C:\MathRAG\storage\documents\{record['document_id']}.pdf"
+    with service._connect() as conn:
+        conn.execute(
+            "UPDATE documents SET storage_path = ? WHERE document_id = ?",
+            (legacy_path, record["document_id"]),
+        )
+
+    document = service.get_document(record["document_id"])
+    resolved = service.resolve_document_path(document)
+    repaired = service.get_document(record["document_id"])
+
+    assert resolved == Path(record["storage_path"]).resolve()
+    assert repaired["storage_path"] == str(resolved)
+
+
 def test_save_document_removes_file_when_database_insert_fails(tmp_path, monkeypatch):
     service = make_service(tmp_path, monkeypatch)
     service.ensure_db()

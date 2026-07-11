@@ -1,4 +1,5 @@
 from src.retriever.bm25_retriever import BM25Retriever, tokenize
+from src.loader.math_text import build_math_search_text
 
 
 def test_tokenize_keeps_chinese_chars_and_alnum_terms():
@@ -31,3 +32,20 @@ def test_bm25_retrieves_keyword_matching_chunk():
 
     assert results[0].vector_id == 1
     assert results[0].score > 0
+
+
+def test_bm25_uses_math_aliases_without_changing_display_text():
+    display_text = "计算 ∫₀¹ x² dx。"
+    metadata = {
+        0: {
+            "title": "定积分公式",
+            "text": display_text,
+            "search_text": build_math_search_text(display_text),
+        }
+    }
+    retriever = BM25Retriever(metadata)
+
+    results = retriever.retrieve("积分的平方项怎么计算", top_k=1)
+
+    assert results[0].vector_id == 0
+    assert results[0].metadata["text"] == display_text

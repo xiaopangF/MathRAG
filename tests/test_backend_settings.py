@@ -11,6 +11,7 @@ def test_backend_settings_load_operational_values(monkeypatch):
     monkeypatch.setenv("MATHRAG_PDF_OCR_LANGUAGES", "chi_sim+eng")
     monkeypatch.setenv("MATHRAG_PDF_OCR_DPI", "240")
     monkeypatch.setenv("MATHRAG_PDF_OCR_MAX_PAGES", "80")
+    monkeypatch.setenv("MATHRAG_PDF_TABLE_DETECTION_ENABLED", "true")
     monkeypatch.setenv("MATHRAG_JOB_MAX_ATTEMPTS", "5")
     monkeypatch.setenv("MATHRAG_RAG_MAX_CONCURRENCY", "3")
     monkeypatch.setenv("MATHRAG_LLM_TIMEOUT_SECONDS", "45")
@@ -32,6 +33,7 @@ def test_backend_settings_load_operational_values(monkeypatch):
     assert settings.pdf_ocr_languages == "chi_sim+eng"
     assert settings.pdf_ocr_dpi == 240
     assert settings.pdf_ocr_max_pages == 80
+    assert settings.pdf_table_detection_enabled is True
     assert settings.job_max_attempts == 5
     assert settings.rag_max_concurrency == 3
     assert settings.llm_timeout_seconds == 45

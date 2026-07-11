@@ -11,6 +11,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
+from src.loader.math_text import build_math_search_text
+
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+|[\u4e00-\u9fff]")
 
@@ -49,7 +51,12 @@ class BM25Retriever:
     def _build(self) -> None:
         total_len = 0
         for vector_id, metadata in self.metadata_by_vector_id.items():
-            content = metadata.get("text") or metadata.get("content") or ""
+            content = (
+                metadata.get("search_text")
+                or metadata.get("text")
+                or metadata.get("content")
+                or ""
+            )
             title = metadata.get("title") or ""
             tokens = tokenize(f"{title}\n{content}")
             if not tokens:
@@ -86,7 +93,7 @@ class BM25Retriever:
         return score
 
     def retrieve(self, query: str, top_k: int = 20) -> list[BM25Result]:
-        query_tokens = tokenize(query)
+        query_tokens = tokenize(build_math_search_text(query))
         if not query_tokens:
             return []
 

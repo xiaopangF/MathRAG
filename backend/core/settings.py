@@ -85,6 +85,7 @@ class BackendSettings:
     pdf_ocr_languages: str
     pdf_ocr_dpi: int
     pdf_ocr_max_pages: int
+    pdf_table_detection_enabled: bool
     sqlite_timeout_seconds: float
     job_max_attempts: int
     rag_max_concurrency: int
@@ -159,6 +160,10 @@ class BackendSettings:
                 100,
                 minimum=1,
                 maximum=2000,
+            ),
+            pdf_table_detection_enabled=_read_bool(
+                "MATHRAG_PDF_TABLE_DETECTION_ENABLED",
+                False,
             ),
             sqlite_timeout_seconds=_read_float(
                 "MATHRAG_SQLITE_TIMEOUT_SECONDS",

@@ -17,6 +17,8 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
+from src.loader.math_text import build_math_search_text
+
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-zh-v1.5"
 DEFAULT_HF_ENDPOINT = "https://hf-mirror.com"
@@ -131,6 +133,7 @@ def load_chunks_from_folder(
         meta.update({
             "file": str(file_path).replace("\\", "/"),
             "char_count": len(content),
+            "search_text": build_math_search_text(content),
         })
 
         texts.append(content)
@@ -174,8 +177,12 @@ def build_vector_index(
     print("模型加载完成")
 
     print("正在向量化...")
+    index_texts = [
+        meta.get("search_text") or text
+        for text, meta in zip(texts, metadatas)
+    ]
     embeddings = model.encode(
-        texts,
+        index_texts,
         batch_size=batch_size,
         show_progress_bar=True,
         normalize_embeddings=True,
@@ -203,9 +210,10 @@ def build_vector_index(
     with output_meta_path.open("w", encoding="utf-8") as f:
         for vector_id, (text, meta) in enumerate(zip(texts, metadatas)):
             record = {
+                **meta,
                 "vector_id": vector_id,
                 "text": text,
-                **meta,
+                "search_text": meta.get("search_text") or text,
             }
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -216,6 +224,7 @@ def build_vector_index(
         "dimension": dimension,
         "index_type": "IndexFlatIP + normalized embeddings",
         "chunk_count": len(texts),
+        "math_search_text": True,
         "index_path": str(index_path).replace("\\", "/"),
         "metadata_path": str(output_meta_path).replace("\\", "/"),
     }

@@ -1,4 +1,5 @@
 import logging
+import re
 import shutil
 import sqlite3
 import uuid
@@ -265,6 +266,32 @@ class KnowledgeBaseService:
                 (document_id,),
             ).fetchone()
         return dict(row) if row else None
+
+    def resolve_document_path(self, document: dict[str, Any]) -> Path:
+        document_id = str(document["document_id"])
+        if not re.fullmatch(r"doc_[0-9a-f]{12}", document_id):
+            raise ValueError(f"非法文档 ID: {document_id}")
+
+        document_path = (DOCUMENTS_DIR / f"{document_id}.pdf").resolve()
+        allowed_root = DOCUMENTS_DIR.resolve()
+        if allowed_root not in document_path.parents:
+            raise ValueError(f"文档路径不在允许范围内: {document_path}")
+        if not document_path.is_file():
+            raise FileNotFoundError(f"文件不存在: {document_path}")
+
+        canonical_path = str(document_path)
+        if document.get("storage_path") != canonical_path:
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE documents SET storage_path = ? WHERE document_id = ?",
+                    (canonical_path, document_id),
+                )
+            document["storage_path"] = canonical_path
+            logger.info(
+                "document_storage_path_repaired",
+                extra={"document_id": document_id},
+            )
+        return document_path
 
     def create_index_job(self, document_id: str) -> dict[str, Any]:
         self.ensure_db()
@@ -776,7 +803,7 @@ class KnowledgeBaseService:
             )
             return
 
-        document_path = Path(document["storage_path"])
+        document_path = self.resolve_document_path(document)
         index_dir = Path(kb["index_dir"])
         chunks_dir = index_dir / "chunks"
         processed_dir = index_dir / "processed"
@@ -813,6 +840,9 @@ class KnowledgeBaseService:
                 ocr_languages=runtime_settings.pdf_ocr_languages,
                 ocr_dpi=runtime_settings.pdf_ocr_dpi,
                 ocr_max_pages=runtime_settings.pdf_ocr_max_pages,
+                table_detection_enabled=(
+                    runtime_settings.pdf_table_detection_enabled
+                ),
             ) as loader:
                 full_text = loader.extract_full_text(add_page_marker=True)
                 extraction_summary = loader.extraction_summary()
@@ -835,6 +865,13 @@ class KnowledgeBaseService:
                     "ocr_skipped_pages": extraction_summary["ocr_skipped_pages"],
                     "removed_margin_blocks": extraction_summary[
                         "removed_margin_blocks"
+                    ],
+                    "pdf_table_count": extraction_summary["table_count"],
+                    "pdf_formula_block_count": extraction_summary[
+                        "formula_block_count"
+                    ],
+                    "table_detection_error_pages": extraction_summary[
+                        "table_detection_error_pages"
                     ],
                 },
             )

@@ -16,6 +16,12 @@ from typing import Any
 
 import fitz  # PyMuPDF
 
+from src.loader.math_text import is_formula_candidate
+
+
+if hasattr(fitz, "no_recommend_layout"):
+    fitz.no_recommend_layout()
+
 
 class PDFLoader:
     """Extract searchable text and page-level diagnostics from a PDF."""
@@ -33,6 +39,7 @@ class PDFLoader:
         ocr_languages: str = "chi_sim+eng",
         ocr_dpi: int = 200,
         ocr_max_pages: int = 100,
+        table_detection_enabled: bool = False,
     ):
         self.file_path = Path(file_path)
         if not self.file_path.exists():
@@ -50,6 +57,7 @@ class PDFLoader:
         self.ocr_languages = ocr_languages
         self.ocr_dpi = ocr_dpi
         self.ocr_max_pages = ocr_max_pages
+        self.table_detection_enabled = table_detection_enabled
         self._pages_cache: list[dict[str, Any]] | None = None
 
     def close(self):
@@ -185,6 +193,41 @@ class PDFLoader:
         two_column = two_column or band_two_column
         return ordered, "two_column" if two_column else "single_column"
 
+    @staticmethod
+    def _block_center_is_inside(
+        block_bbox: tuple[float, float, float, float],
+        container_bbox: tuple[float, float, float, float],
+    ) -> bool:
+        center_x = (block_bbox[0] + block_bbox[2]) / 2
+        center_y = (block_bbox[1] + block_bbox[3]) / 2
+        return (
+            container_bbox[0] <= center_x <= container_bbox[2]
+            and container_bbox[1] <= center_y <= container_bbox[3]
+        )
+
+    @staticmethod
+    def _extract_tables(page: fitz.Page) -> tuple[list[dict[str, Any]], str | None]:
+        try:
+            finder = page.find_tables()
+            tables = []
+            for table_index, table in enumerate(finder.tables):
+                markdown = table.to_markdown(clean=True).strip()
+                if not markdown:
+                    continue
+                tables.append(
+                    {
+                        "table_index": table_index,
+                        "bbox": tuple(round(float(value), 2) for value in table.bbox),
+                        "row_count": int(table.row_count),
+                        "col_count": int(table.col_count),
+                        "cells": table.extract(),
+                        "markdown": markdown,
+                    }
+                )
+            return tables, None
+        except (RuntimeError, ValueError) as exc:
+            return [], str(exc).strip()[:500]
+
     def _extract_page_layout(
         self,
         page_index: int,
@@ -246,9 +289,34 @@ class PDFLoader:
                     "font": Counter(fonts).most_common(1)[0][0] if fonts else "",
                     "line_count": len(lines),
                     "position": self._margin_position(bbox, page_height),
+                    "content_type": "text",
+                    "structural_exclusion": None,
                     "excluded_reason": None,
                 }
             )
+
+        tables: list[dict[str, Any]] = []
+        table_detection_error = None
+        if self.table_detection_enabled and extraction_method == "native":
+            tables, table_detection_error = self._extract_tables(page)
+            for table in tables:
+                for block in text_blocks:
+                    if self._block_center_is_inside(block["bbox"], table["bbox"]):
+                        block["structural_exclusion"] = "table_replaced"
+                table_bbox = table["bbox"]
+                text_blocks.append(
+                    {
+                        "text": table["markdown"],
+                        "bbox": table_bbox,
+                        "font_size": None,
+                        "font": "",
+                        "line_count": len(table["markdown"].splitlines()),
+                        "position": self._margin_position(table_bbox, page_height),
+                        "content_type": "table",
+                        "structural_exclusion": None,
+                        "excluded_reason": None,
+                    }
+                )
 
         ordered_blocks, layout = self._order_blocks(text_blocks, page_width)
         body_font_sizes = [
@@ -266,7 +334,14 @@ class PDFLoader:
                 and block["font_size"] >= median_font_size * 1.2
                 and len(block["text"]) <= 160
             )
-            block["role"] = "heading_candidate" if is_heading else block["position"]
+            if block["content_type"] == "table":
+                block["role"] = "table"
+            elif is_formula_candidate(block["text"]):
+                block["role"] = "formula_candidate"
+            else:
+                block["role"] = (
+                    "heading_candidate" if is_heading else block["position"]
+                )
 
         page_area = max(page_width * page_height, 1.0)
         return {
@@ -281,6 +356,9 @@ class PDFLoader:
             "extraction_method": extraction_method,
             "ocr_status": "not_needed",
             "ocr_error": None,
+            "tables": tables,
+            "table_count": len(tables),
+            "table_detection_error": table_detection_error,
         }
 
     @classmethod
@@ -349,8 +427,12 @@ class PDFLoader:
         for page in pages:
             kept_text: list[str] = []
             removed_count = 0
+            replaced_table_text_blocks = 0
             for block in page["blocks"]:
-                block["excluded_reason"] = None
+                block["excluded_reason"] = block.get("structural_exclusion")
+                if block["excluded_reason"] == "table_replaced":
+                    replaced_table_text_blocks += 1
+                    continue
                 signature = (block["position"], self._noise_signature(block["text"]))
                 if signature in repeated_signatures:
                     block["excluded_reason"] = f"repeated_{block['position']}"
@@ -377,6 +459,7 @@ class PDFLoader:
                         block["excluded_reason"] is None for block in page["blocks"]
                     ),
                     "removed_margin_block_count": removed_count,
+                    "replaced_table_text_block_count": replaced_table_text_blocks,
                     "quality": quality,
                     "quality_flags": quality_flags,
                     "needs_ocr": needs_ocr,
@@ -480,6 +563,17 @@ class PDFLoader:
             "ocr_dpi": self.ocr_dpi,
             "removed_margin_blocks": sum(
                 page["removed_margin_block_count"] for page in pages
+            ),
+            "table_count": sum(page["table_count"] for page in pages),
+            "table_pages": [page["page"] for page in pages if page["table_count"]],
+            "table_detection_error_pages": [
+                page["page"] for page in pages if page["table_detection_error"]
+            ],
+            "formula_block_count": sum(
+                block["role"] == "formula_candidate"
+                and block["excluded_reason"] is None
+                for page in pages
+                for block in page["blocks"]
             ),
             "char_count": sum(page["char_count"] for page in pages),
             "layouts": dict(Counter(page["layout"] for page in pages)),

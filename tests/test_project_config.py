@@ -30,6 +30,7 @@ def test_compose_defines_backend_frontend_and_persistent_model_cache():
     assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_LANGUAGES"] == "${MATHRAG_PDF_OCR_LANGUAGES:-chi_sim+eng}"
     assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_DPI"] == "${MATHRAG_PDF_OCR_DPI:-200}"
     assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_MAX_PAGES"] == "${MATHRAG_PDF_OCR_MAX_PAGES:-100}"
+    assert compose["x-backend-environment"]["MATHRAG_PDF_TABLE_DETECTION_ENABLED"] == "${MATHRAG_PDF_TABLE_DETECTION_ENABLED:-true}"
     assert compose["x-backend-environment"]["MATHRAG_LLM_TIMEOUT_SECONDS"] == "${MATHRAG_LLM_TIMEOUT_SECONDS:-30}"
     assert compose["x-backend-environment"]["MATHRAG_LLM_MAX_RETRIES"] == "${MATHRAG_LLM_MAX_RETRIES:-2}"
     assert {"backend", "frontend", "model-cache"}.issubset(compose["services"])

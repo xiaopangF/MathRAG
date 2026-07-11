@@ -36,6 +36,9 @@ class StructuredFormatter(logging.Formatter):
         "ocr_failed_pages",
         "ocr_skipped_pages",
         "removed_margin_blocks",
+        "pdf_table_count",
+        "pdf_formula_block_count",
+        "table_detection_error_pages",
     )
 
     def __init__(self, *, json_output: bool):
