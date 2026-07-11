@@ -15,6 +15,8 @@ def test_chunk_loader_builds_math_search_text_and_preserves_display_text(tmp_pat
             {
                 "id": "child_0001",
                 "title": "定积分",
+                "chapter": "第五章 积分学",
+                "section": "一、定积分的概念",
                 "type": "formula",
             },
             ensure_ascii=False,
@@ -30,6 +32,8 @@ def test_chunk_loader_builds_math_search_text_and_preserves_display_text(tmp_pat
 
     assert texts == [display_text]
     assert "定积分" in metadata[0]["search_text"]
+    assert "第五章 积分学" in metadata[0]["search_text"]
+    assert "一、定积分的概念" in metadata[0]["search_text"]
     assert "integral" in metadata[0]["search_text"]
     assert "积分" in metadata[0]["search_text"]
     assert "^(2)" in metadata[0]["search_text"]

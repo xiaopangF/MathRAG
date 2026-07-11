@@ -30,8 +30,13 @@ from src.loader.math_text import build_math_search_text
 
 def build_ranking_text(content: str, metadata: dict[str, Any]) -> str:
     """Add structural context for ranking without changing displayed content."""
-    title = str(metadata.get("title") or "").strip()
-    return f"{title}\n{content}" if title else content
+    parts: list[str] = []
+    for field in ("chapter", "section", "title"):
+        value = str(metadata.get(field) or "").strip()
+        if value and value not in parts:
+            parts.append(value)
+    parts.append(content)
+    return "\n".join(parts)
 
 
 def load_model_cache_first(factory, model_name: str, label: str):

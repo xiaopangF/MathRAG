@@ -61,7 +61,7 @@ def apply_page_to_chunk(chunk: Dict[str, Any] | None, page: int | None) -> None:
 def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
     """
     根据标题层级切分全文，返回 chunks 列表。
-    每个 chunk 包含：title, level, content, start_pos, end_pos
+    每个 chunk 包含标题、内容、页码范围和当前章/节上下文。
     """
     text = normalize_text(full_text)
     lines = text.splitlines()
@@ -69,6 +69,8 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
     chunks = []
     current_chunk = None
     current_page = None
+    current_chapter = ""
+    current_section = ""
 
     # 定义标题匹配函数
     def get_title_level(line: str) -> tuple:
@@ -95,6 +97,11 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
             # 新标题开始，保存上一个chunk
             if current_chunk:
                 chunks.append(current_chunk)
+            if level == 0:
+                current_chapter = title
+                current_section = ""
+            elif level in (1, 2):
+                current_section = title
             current_chunk = {
                 'title': title,
                 'level': level,
@@ -102,6 +109,8 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
                 'start_line': line_no,
                 'page_start': current_page,
                 'page_end': current_page,
+                'chapter': current_chapter,
+                'section': current_section,
             }
         else:
             # 普通内容行
@@ -118,6 +127,8 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
                         'start_line': 0,
                         'page_start': current_page,
                         'page_end': current_page,
+                        'chapter': '',
+                        'section': '',
                     }
                 current_chunk['content'] += line + '\n'
                 apply_page_to_chunk(current_chunk, current_page)
@@ -169,6 +180,8 @@ def save_chunks_to_files(
                 'start_line': chunk.get('start_line', 0),
                 'page_start': chunk.get('page_start'),
                 'page_end': chunk.get('page_end'),
+                'chapter': chunk.get('chapter', ''),
+                'section': chunk.get('section', ''),
             }
             parent_file = parent_dir / f"{parent['id']}_{safe_filename_part(parent['title'])}.txt"
             parent_file.write_text(parent['content'], encoding='utf-8')
@@ -183,6 +196,8 @@ def save_chunks_to_files(
                 'source_file': source_file,
                 'page_start': parent['page_start'],
                 'page_end': parent['page_end'],
+                'chapter': parent['chapter'],
+                'section': parent['section'],
             }, ensure_ascii=False) + '\n')
 
             # 对父块内容进行子块切分（按单元）
@@ -204,6 +219,8 @@ def save_chunks_to_files(
                             'type': classify_unit(unit_title),
                             'page_start': parent['page_start'],
                             'page_end': parent['page_end'],
+                            'chapter': parent['chapter'],
+                            'section': parent['section'],
                         }
                         child_file = child_dir / f"{child['id']}_{safe_filename_part(child['title'])}.txt"
                         child_file.write_text(child['content'], encoding='utf-8')
@@ -219,6 +236,8 @@ def save_chunks_to_files(
                             'source_file': source_file,
                             'page_start': child['page_start'],
                             'page_end': child['page_end'],
+                            'chapter': child['chapter'],
+                            'section': child['section'],
                         }, ensure_ascii=False) + '\n')
             else:
                 # 没有单元，整个父块作为一个子块
@@ -231,6 +250,8 @@ def save_chunks_to_files(
                     'type': 'text',
                     'page_start': parent['page_start'],
                     'page_end': parent['page_end'],
+                    'chapter': parent['chapter'],
+                    'section': parent['section'],
                 }
                 child_file = child_dir / f"{child['id']}_{safe_filename_part(child['title'])}.txt"
                 child_file.write_text(child['content'], encoding='utf-8')
@@ -246,6 +267,8 @@ def save_chunks_to_files(
                     'source_file': source_file,
                     'page_start': child['page_start'],
                     'page_end': child['page_end'],
+                    'chapter': child['chapter'],
+                    'section': child['section'],
                 }, ensure_ascii=False) + '\n')
 
     print(f"切分完成：父块 {parent_id} 个，子块 {child_id} 个")
