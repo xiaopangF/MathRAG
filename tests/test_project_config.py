@@ -98,7 +98,10 @@ def test_ci_checks_supported_runtimes_and_docker_stack():
     backend_steps = backend_job["steps"]
     assert any(step.get("run") == "python -m pip check" for step in backend_steps)
     assert any(step.get("name") == "Run PDF integration tests" for step in backend_steps)
-    assert any(step.get("name") == "Upload backend test results" for step in backend_steps)
+    upload_step = next(
+        step for step in backend_steps if step.get("name") == "Upload backend test results"
+    )
+    assert upload_step["if"] == "always() && steps.unit-tests.outcome != 'skipped'"
 
     frontend_steps = workflow["jobs"]["frontend-build"]["steps"]
     assert any(step.get("name") == "Upload frontend build" for step in frontend_steps)
