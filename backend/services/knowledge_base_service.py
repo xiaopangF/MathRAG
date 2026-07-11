@@ -807,10 +807,37 @@ class KnowledgeBaseService:
             from src.retriever.vector_indexer import build_vector_index
 
             processed_dir.mkdir(parents=True, exist_ok=True)
-            with PDFLoader(document_path) as loader:
+            with PDFLoader(
+                document_path,
+                ocr_enabled=runtime_settings.pdf_ocr_enabled,
+                ocr_languages=runtime_settings.pdf_ocr_languages,
+                ocr_dpi=runtime_settings.pdf_ocr_dpi,
+                ocr_max_pages=runtime_settings.pdf_ocr_max_pages,
+            ) as loader:
                 full_text = loader.extract_full_text(add_page_marker=True)
+                extraction_summary = loader.extraction_summary()
                 (processed_dir / "full_text.txt").write_text(full_text, encoding="utf-8")
                 loader.save_pages_to_jsonl(processed_dir / "pages.jsonl")
+                loader.save_extraction_summary(processed_dir / "extraction_summary.json")
+            logger.info(
+                "pdf_extraction_completed",
+                extra={
+                    "job_id": job_id,
+                    "document_id": job["document_id"],
+                    "knowledge_base_id": job["knowledge_base_id"],
+                    "pdf_total_pages": extraction_summary["total_pages"],
+                    "pdf_text_pages": extraction_summary["text_pages"],
+                    "ocr_recommended_pages": extraction_summary[
+                        "ocr_recommended_pages"
+                    ],
+                    "ocr_applied_pages": extraction_summary["ocr_applied_pages"],
+                    "ocr_failed_pages": extraction_summary["ocr_failed_pages"],
+                    "ocr_skipped_pages": extraction_summary["ocr_skipped_pages"],
+                    "removed_margin_blocks": extraction_summary[
+                        "removed_margin_blocks"
+                    ],
+                },
+            )
 
             self.update_job(job_id, "running", 35, "正在结构化切分")
             chunks = smart_split_by_titles(full_text)

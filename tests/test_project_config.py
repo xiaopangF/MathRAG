@@ -26,6 +26,10 @@ def test_compose_defines_backend_frontend_and_persistent_model_cache():
     assert compose["x-backend-environment"]["MATHRAG_ALLOW_RUNTIME_API_KEY"] == "${MATHRAG_ALLOW_RUNTIME_API_KEY:-false}"
     assert compose["x-backend-environment"]["MATHRAG_JOB_MAX_ATTEMPTS"] == "${MATHRAG_JOB_MAX_ATTEMPTS:-3}"
     assert compose["x-backend-environment"]["MATHRAG_MAX_JSON_BODY_MB"] == "${MATHRAG_MAX_JSON_BODY_MB:-1}"
+    assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_ENABLED"] == "${MATHRAG_PDF_OCR_ENABLED:-true}"
+    assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_LANGUAGES"] == "${MATHRAG_PDF_OCR_LANGUAGES:-chi_sim+eng}"
+    assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_DPI"] == "${MATHRAG_PDF_OCR_DPI:-200}"
+    assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_MAX_PAGES"] == "${MATHRAG_PDF_OCR_MAX_PAGES:-100}"
     assert compose["x-backend-environment"]["MATHRAG_LLM_TIMEOUT_SECONDS"] == "${MATHRAG_LLM_TIMEOUT_SECONDS:-30}"
     assert compose["x-backend-environment"]["MATHRAG_LLM_MAX_RETRIES"] == "${MATHRAG_LLM_MAX_RETRIES:-2}"
     assert {"backend", "frontend", "model-cache"}.issubset(compose["services"])
@@ -41,6 +45,14 @@ def test_backend_dockerfile_installs_cpu_torch_before_runtime_requirements():
     assert "ARG TORCH_VERSION=2.6.0+cpu" in dockerfile
     assert "https://download.pytorch.org/whl/cpu" in dockerfile
     assert dockerfile.index("torch==${TORCH_VERSION}") < dockerfile.index("-r requirements.txt")
+
+
+def test_backend_dockerfile_installs_tesseract_ocr_languages():
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "tesseract-ocr" in dockerfile
+    assert "tesseract-ocr-eng" in dockerfile
+    assert "tesseract-ocr-chi-sim" in dockerfile
 
 
 def test_frontend_nginx_serves_built_static_assets():

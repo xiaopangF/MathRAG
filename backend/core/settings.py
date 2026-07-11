@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -59,6 +60,15 @@ def _read_csv(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return values
 
 
+def _read_ocr_languages(name: str, default: str) -> str:
+    value = os.getenv(name, default).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_+-]{1,128}", value):
+        raise SettingsError(
+            f"{name} must contain Tesseract language codes joined by '+'"
+        )
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class BackendSettings:
     app_name: str
@@ -71,6 +81,10 @@ class BackendSettings:
     cors_origin_regex: str
     max_upload_bytes: int
     max_json_body_bytes: int
+    pdf_ocr_enabled: bool
+    pdf_ocr_languages: str
+    pdf_ocr_dpi: int
+    pdf_ocr_max_pages: int
     sqlite_timeout_seconds: float
     job_max_attempts: int
     rag_max_concurrency: int
@@ -129,6 +143,23 @@ class BackendSettings:
             )
             * 1024
             * 1024,
+            pdf_ocr_enabled=_read_bool("MATHRAG_PDF_OCR_ENABLED", False),
+            pdf_ocr_languages=_read_ocr_languages(
+                "MATHRAG_PDF_OCR_LANGUAGES",
+                "chi_sim+eng",
+            ),
+            pdf_ocr_dpi=_read_int(
+                "MATHRAG_PDF_OCR_DPI",
+                200,
+                minimum=72,
+                maximum=600,
+            ),
+            pdf_ocr_max_pages=_read_int(
+                "MATHRAG_PDF_OCR_MAX_PAGES",
+                100,
+                minimum=1,
+                maximum=2000,
+            ),
             sqlite_timeout_seconds=_read_float(
                 "MATHRAG_SQLITE_TIMEOUT_SECONDS",
                 10.0,

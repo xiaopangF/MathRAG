@@ -7,6 +7,10 @@ def test_backend_settings_load_operational_values(monkeypatch):
     monkeypatch.setenv("MATHRAG_MAX_UPLOAD_MB", "12")
     monkeypatch.setenv("MATHRAG_SQLITE_TIMEOUT_SECONDS", "4.5")
     monkeypatch.setenv("MATHRAG_MAX_JSON_BODY_MB", "2")
+    monkeypatch.setenv("MATHRAG_PDF_OCR_ENABLED", "true")
+    monkeypatch.setenv("MATHRAG_PDF_OCR_LANGUAGES", "chi_sim+eng")
+    monkeypatch.setenv("MATHRAG_PDF_OCR_DPI", "240")
+    monkeypatch.setenv("MATHRAG_PDF_OCR_MAX_PAGES", "80")
     monkeypatch.setenv("MATHRAG_JOB_MAX_ATTEMPTS", "5")
     monkeypatch.setenv("MATHRAG_RAG_MAX_CONCURRENCY", "3")
     monkeypatch.setenv("MATHRAG_LLM_TIMEOUT_SECONDS", "45")
@@ -24,6 +28,10 @@ def test_backend_settings_load_operational_values(monkeypatch):
     assert settings.max_upload_bytes == 12 * 1024 * 1024
     assert settings.sqlite_busy_timeout_ms == 4500
     assert settings.max_json_body_bytes == 2 * 1024 * 1024
+    assert settings.pdf_ocr_enabled is True
+    assert settings.pdf_ocr_languages == "chi_sim+eng"
+    assert settings.pdf_ocr_dpi == 240
+    assert settings.pdf_ocr_max_pages == 80
     assert settings.job_max_attempts == 5
     assert settings.rag_max_concurrency == 3
     assert settings.llm_timeout_seconds == 45
@@ -41,6 +49,9 @@ def test_backend_settings_load_operational_values(monkeypatch):
     [
         ("MATHRAG_MAX_UPLOAD_MB", "0"),
         ("MATHRAG_MAX_JSON_BODY_MB", "0"),
+        ("MATHRAG_PDF_OCR_LANGUAGES", "chi sim"),
+        ("MATHRAG_PDF_OCR_DPI", "40"),
+        ("MATHRAG_PDF_OCR_MAX_PAGES", "0"),
         ("MATHRAG_SQLITE_TIMEOUT_SECONDS", "invalid"),
         ("MATHRAG_JOB_MAX_ATTEMPTS", "100"),
         ("MATHRAG_LOG_JSON", "sometimes"),

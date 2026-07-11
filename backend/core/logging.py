@@ -29,6 +29,13 @@ class StructuredFormatter(logging.Formatter):
         "recovered_jobs",
         "restored_directories",
         "removed_staged_directories",
+        "pdf_total_pages",
+        "pdf_text_pages",
+        "ocr_recommended_pages",
+        "ocr_applied_pages",
+        "ocr_failed_pages",
+        "ocr_skipped_pages",
+        "removed_margin_blocks",
     )
 
     def __init__(self, *, json_output: bool):
