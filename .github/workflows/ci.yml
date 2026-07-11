@@ -47,6 +47,11 @@ jobs:
       - name: Check Python dependency consistency
         run: python -m pip check
 
+      - name: Validate evaluation datasets
+        run: |
+          python validate_eval_dataset.py --eval-path eval/questions.sample.jsonl --profile grounded-smoke
+          python validate_eval_dataset.py --eval-path data/eval/questions.jsonl --profile keyword-100
+
       - name: Run unit tests
         id: unit-tests
         env:
