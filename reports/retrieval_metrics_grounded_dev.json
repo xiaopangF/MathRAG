@@ -1,0 +1,122 @@
+{
+  "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+  "index_dir": "data\\faiss_index",
+  "question_count": 30,
+  "evaluated_count": 28,
+  "retrieved_question_count": 28,
+  "skipped_count": 2,
+  "top_k": 5,
+  "top_k_embedding": 20,
+  "top_k_bm25": 20,
+  "rerank_batch_size": 64,
+  "use_hybrid_search": true,
+  "recall_at_1": 0.7857142857142857,
+  "recall_at_3": 1.0,
+  "recall_at_5": 1.0,
+  "mrr": 0.880952380952381,
+  "hits": {
+    "hit_at_1": 22,
+    "hit_at_3": 28,
+    "hit_at_5": 28
+  },
+  "keyword_metrics": {
+    "evaluated_count": 28,
+    "recall_at_1": 0.7857142857142857,
+    "recall_at_3": 1.0,
+    "recall_at_5": 1.0,
+    "mrr": 0.880952380952381,
+    "hits": {
+      "hit_at_1": 22,
+      "hit_at_3": 28,
+      "hit_at_5": 28
+    }
+  },
+  "page_metrics": {
+    "evaluated_count": 28,
+    "recall_at_1": 0.75,
+    "recall_at_3": 0.9285714285714286,
+    "recall_at_5": 1.0,
+    "mrr": 0.849404761904762,
+    "hits": {
+      "hit_at_1": 21,
+      "hit_at_3": 26,
+      "hit_at_5": 28
+    }
+  },
+  "section_metrics": {
+    "evaluated_count": 28,
+    "recall_at_1": 0.6071428571428571,
+    "recall_at_3": 0.8214285714285714,
+    "recall_at_5": 0.9642857142857143,
+    "mrr": 0.7303571428571428,
+    "hits": {
+      "hit_at_1": 17,
+      "hit_at_3": 23,
+      "hit_at_5": 27
+    }
+  },
+  "failed_cases": [],
+  "page_failed_cases": [],
+  "section_failed_cases": [
+    {
+      "id": "gd010",
+      "question": "罗尔定理的条件是什么？",
+      "expected_sections": [
+        "二、微分中值定理",
+        "罗尔定理"
+      ],
+      "top_results": [
+        {
+          "rank": 1,
+          "title": "第二章",
+          "chapter": "第二章",
+          "section": "",
+          "page_start": 156,
+          "page_end": 156,
+          "score": 0.9822293519973755,
+          "preview": "一元函数微分学\n\n少有一个不等于!（\"），不妨设#!!（\"），于是在开区间（\"，$）内至少存在一点\n\n!，使得!（!）!#，由费马定理知，必有!\"（!）!#$\n\n罗尔定理的几何意义：如图%$&’所示，对闭区\n\n间上的连续曲线，若其上每一点（端点除外）都有不\n\n垂直于% 轴的切线，且曲线两端点的纵坐标相等，则\n\n曲线上至..."
+        },
+        {
+          "rank": 2,
+          "title": "例! 设\"（&）\"’［$，#］#(（$，#）",
+          "chapter": "第二章",
+          "section": "",
+          "page_start": 162,
+          "page_end": 162,
+          "score": 0.9709066152572632,
+          "preview": "（$$$），证明：%!\"（$，#）使’!［\"（#）\n\n#\"（$）］\"（#\n\n’）\"!（!）%\n\n’#$\n\n证\n所证问题可化为\"（#）#\"（$）\n\n’\n\"\"!（!）\n\n，因此可令%（&）\"&\n\n’，则在（$，\n\n’#$\n\n’!\n\n#\n\n#）内%!（&）\"’&!$，\"（&）与%（&）在［$，#］上满足柯西定理的条件，则有\n..."
+        },
+        {
+          "rank": 3,
+          "title": "定理要求证明：#!$（&，’）满足导函数方程",
+          "chapter": "第二章",
+          "section": "",
+          "page_start": 158,
+          "page_end": 159,
+          "score": 0.9428912401199341,
+          "preview": "\"’（#）$\"（’）$\"（&）\n\n’$&\n\"!，\n\n即\n\n\"（#）$\"（’）$\"（&）\n\n’$&\n［\n］\n#\n\n’\n\n\"!，\n\n由此，只要令!（#）\"\"（#）$\"（’）$\"（&）\n\n’$&\n#，问题就转化为证明!（#）是否满\n\n足罗尔定理%\n\n证\n作辅助函数\n\n!（#）\"\"（#）$\"（’）$\"（&）\n\n’$&\n#，\n\n..."
+        },
+        {
+          "rank": 4,
+          "title": "定理得",
+          "chapter": "第二章",
+          "section": "",
+          "page_start": 162,
+          "page_end": 164,
+          "score": 0.859967827796936,
+          "preview": "\"（#）#\"（$）\n%（#）#%（$）\"\"!（!）\n（##$）\n%!（!）\n（##$）\"\"!（!）\n\n%!（!），!\"（$，#）\n\n’&，\n&$\n｛\n&\n\n*%设\"（&）\" &\n’+&，&&&\n\n，这样求\"!（&）对不对？\n\n当&’&时，\"!（&）\"’&，\"!#（&）\",-.\n\n&(&#\"!（&）\",-.\n\n&(&#’..."
+        },
+        {
+          "rank": 5,
+          "title": "第二章",
+          "chapter": "第二章",
+          "section": "",
+          "page_start": 158,
+          "page_end": 158,
+          "score": 0.8529613018035889,
+          "preview": "一元函数微分学\n\n!（!）\"\"（!）!!，!（#）\"\"（#）$#\"!%由闭区间上连续函数的零点定理知，\n\n#!$（!，#），使!（!）\"!，即\"（!）\"!%\n\n用反证法证惟一性%若有两点!#、!&$（!，#）\n（!#\"!&），使\"（!#）\"!#，\n\n\"（!&）\"!&，显然!（#）在［!#，!&］上满足罗尔定理条件，于是..."
+        }
+      ]
+    }
+  ]
+}
