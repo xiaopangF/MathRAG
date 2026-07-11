@@ -38,6 +38,26 @@ def test_build_ranking_text_includes_title_without_mutating_content():
     assert ranking_text == f"数列极限与函数极限的关系\n{content}"
 
 
+def test_build_ranking_text_includes_inherited_structure_once():
+    content = "函数在闭区间连续，在开区间可导。"
+
+    ranking_text = build_ranking_text(
+        content,
+        {
+            "chapter": "第二章 一元函数微分学",
+            "section": "二、微分中值定理",
+            "title": "拉格朗日定理",
+        },
+    )
+
+    assert ranking_text.splitlines() == [
+        "第二章 一元函数微分学",
+        "二、微分中值定理",
+        "拉格朗日定理",
+        content,
+    ]
+
+
 def test_batch_retrieve_normalizes_math_queries_before_embedding():
     retriever = MathRAGRetriever.__new__(MathRAGRetriever)
     retriever.config = SimpleNamespace(

@@ -84,6 +84,17 @@ def extract_content_from_chunk_file(file_path: Path) -> str:
     return content if content else text.strip()
 
 
+def build_structural_search_text(content: str, metadata: dict) -> str:
+    """Build normalized index text with inherited structural context."""
+    parts: list[str] = []
+    for field in ("chapter", "section", "title"):
+        value = str(metadata.get(field) or "").strip()
+        if value and value not in parts:
+            parts.append(value)
+    parts.append(content)
+    return build_math_search_text("\n".join(parts))
+
+
 def load_chunks_from_folder(
     chunk_dir: str = "data/chunks/children",
     metadata_path: str = "data/chunks/metadata.jsonl",
@@ -130,12 +141,10 @@ def load_chunks_from_folder(
                 "chunk_type": "text",
             }
 
-        title = str(meta.get("title") or "").strip()
-        retrieval_text = f"{title}\n{content}" if title else content
         meta.update({
             "file": str(file_path).replace("\\", "/"),
             "char_count": len(content),
-            "search_text": build_math_search_text(retrieval_text),
+            "search_text": build_structural_search_text(content, meta),
         })
 
         texts.append(content)
