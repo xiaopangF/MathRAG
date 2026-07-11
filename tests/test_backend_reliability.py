@@ -5,9 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from backend.core.database import UnsupportedSchemaVersionError
 from backend.services import knowledge_base_service as kb_module
-from backend.services.feedback_service import FeedbackService
+from backend.services.feedback_service import FEEDBACK_SCHEMA_VERSION, FeedbackService
 from backend.services.knowledge_base_service import (
+    BACKEND_SCHEMA_VERSION,
     MAX_UPLOAD_BYTES,
     KnowledgeBaseService,
     sanitize_filename,
@@ -263,9 +265,11 @@ def test_feedback_database_uses_wal_mode(tmp_path):
 
     with service._connect() as conn:
         journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
 
     assert feedback_id == 1
     assert journal_mode == "wal"
+    assert schema_version == FEEDBACK_SCHEMA_VERSION
 
 
 def test_backend_database_uses_wal_mode(tmp_path, monkeypatch):
@@ -274,8 +278,65 @@ def test_backend_database_uses_wal_mode(tmp_path, monkeypatch):
 
     with service._connect() as conn:
         journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
 
     assert journal_mode == "wal"
+    assert schema_version == BACKEND_SCHEMA_VERSION
+
+
+def test_backend_database_migrates_unversioned_job_table(tmp_path, monkeypatch):
+    service = make_service(tmp_path, monkeypatch)
+    service.db_path.parent.mkdir(parents=True)
+    with sqlite3.connect(service.db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE index_jobs (
+                job_id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                knowledge_base_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                progress INTEGER NOT NULL,
+                message TEXT NOT NULL,
+                error TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO index_jobs VALUES (
+                'job_legacy', 'doc_legacy', 'kb_legacy', 'failed', 100,
+                'legacy', 'legacy error', '2026-01-01', '2026-01-01'
+            )
+            """
+        )
+
+    service.ensure_db()
+
+    with service._connect() as conn:
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(index_jobs)").fetchall()
+        }
+        migrated = conn.execute(
+            "SELECT attempt_count, started_at, finished_at FROM index_jobs"
+        ).fetchone()
+        schema_version = conn.execute("PRAGMA user_version").fetchone()[0]
+
+    assert {"attempt_count", "started_at", "finished_at"}.issubset(columns)
+    assert tuple(migrated) == (0, "", "")
+    assert schema_version == BACKEND_SCHEMA_VERSION
+
+
+def test_backend_database_rejects_newer_schema_version(tmp_path, monkeypatch):
+    service = make_service(tmp_path, monkeypatch)
+    service.db_path.parent.mkdir(parents=True)
+    with sqlite3.connect(service.db_path) as conn:
+        conn.execute(f"PRAGMA user_version = {BACKEND_SCHEMA_VERSION + 1}")
+
+    with pytest.raises(UnsupportedSchemaVersionError, match="newer than"):
+        service.ensure_db()
 
 
 def test_rag_service_rejects_when_inference_capacity_is_exhausted():

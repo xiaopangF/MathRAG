@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi import UploadFile
 
+from backend.core.database import apply_sqlite_migrations
 from backend.core.paths import BACKEND_DB_PATH, DOCUMENTS_DIR, INDEXES_DIR
 from backend.core.settings import get_settings
 
@@ -23,6 +24,7 @@ ALLOWED_PDF_CONTENT_TYPES = {
     "application/octet-stream",
     "binary/octet-stream",
 }
+BACKEND_SCHEMA_VERSION = 1
 
 
 class JobStatus(str, Enum):
@@ -106,6 +108,82 @@ class KnowledgeBaseService:
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
+    def _migrate_schema_v1(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS documents (
+                document_id TEXT PRIMARY KEY,
+                filename TEXT NOT NULL,
+                content_type TEXT NOT NULL,
+                storage_path TEXT NOT NULL,
+                size_bytes INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_bases (
+                knowledge_base_id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                index_dir TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS index_jobs (
+                job_id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL,
+                knowledge_base_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                progress INTEGER NOT NULL,
+                message TEXT NOT NULL,
+                error TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                started_at TEXT NOT NULL DEFAULT '',
+                finished_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        self._ensure_column(
+            conn,
+            "index_jobs",
+            "attempt_count",
+            "INTEGER NOT NULL DEFAULT 0",
+        )
+        self._ensure_column(
+            conn,
+            "index_jobs",
+            "started_at",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        self._ensure_column(
+            conn,
+            "index_jobs",
+            "finished_at",
+            "TEXT NOT NULL DEFAULT ''",
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_index_jobs_status
+            ON index_jobs(status, updated_at)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_index_jobs_document_status
+            ON index_jobs(document_id, status, created_at)
+            """
+        )
+
     def ensure_db(self) -> None:
         if self._db_initialized:
             return
@@ -115,79 +193,10 @@ class KnowledgeBaseService:
             with self._connect() as conn:
                 conn.execute("PRAGMA journal_mode = WAL")
                 conn.execute("PRAGMA synchronous = NORMAL")
-                conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS documents (
-                    document_id TEXT PRIMARY KEY,
-                    filename TEXT NOT NULL,
-                    content_type TEXT NOT NULL,
-                    storage_path TEXT NOT NULL,
-                    size_bytes INTEGER NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-                """
-                )
-                conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS knowledge_bases (
-                    knowledge_base_id TEXT PRIMARY KEY,
-                    document_id TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    index_dir TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-                )
-                conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS index_jobs (
-                    job_id TEXT PRIMARY KEY,
-                    document_id TEXT NOT NULL,
-                    knowledge_base_id TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    progress INTEGER NOT NULL,
-                    message TEXT NOT NULL,
-                    error TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    attempt_count INTEGER NOT NULL DEFAULT 0,
-                    started_at TEXT NOT NULL DEFAULT '',
-                    finished_at TEXT NOT NULL DEFAULT ''
-                )
-                """
-                )
-                self._ensure_column(
+                apply_sqlite_migrations(
                     conn,
-                    "index_jobs",
-                    "attempt_count",
-                    "INTEGER NOT NULL DEFAULT 0",
-                )
-                self._ensure_column(
-                    conn,
-                    "index_jobs",
-                    "started_at",
-                    "TEXT NOT NULL DEFAULT ''",
-                )
-                self._ensure_column(
-                    conn,
-                    "index_jobs",
-                    "finished_at",
-                    "TEXT NOT NULL DEFAULT ''",
-                )
-                conn.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_index_jobs_status
-                    ON index_jobs(status, updated_at)
-                    """
-                )
-                conn.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_index_jobs_document_status
-                    ON index_jobs(document_id, status, created_at)
-                    """
+                    database_name="backend database",
+                    migrations={1: self._migrate_schema_v1},
                 )
             self._db_initialized = True
 

@@ -1,8 +1,11 @@
+from types import SimpleNamespace
+
 from backend.services.eval_service import eval_service
 from backend.services.knowledge_base_service import ResourceConflictError
 from backend.services.rag_service import RAGBusyError
 from backend.api import routes_chat
 from backend.api import routes_documents
+from backend.api import routes_settings
 from backend.main import app
 from fastapi.testclient import TestClient
 from src.generation.llm_generator import (
@@ -138,6 +141,11 @@ def test_delete_building_knowledge_base_returns_conflict(monkeypatch):
 def test_deepseek_key_can_be_configured(monkeypatch):
     client = TestClient(app)
 
+    monkeypatch.setattr(
+        routes_settings,
+        "runtime_settings",
+        SimpleNamespace(allow_runtime_api_key=True),
+    )
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
 
@@ -151,6 +159,22 @@ def test_deepseek_key_can_be_configured(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["deepseek_api_key_configured"] is True
+
+
+def test_deepseek_key_update_is_disabled_in_production(monkeypatch):
+    monkeypatch.setattr(
+        routes_settings,
+        "runtime_settings",
+        SimpleNamespace(allow_runtime_api_key=False),
+    )
+
+    response = TestClient(app).post(
+        "/api/settings/deepseek-key",
+        json={"api_key": "test-key"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "permission_denied"
 
 
 def test_chat_returns_401_when_deepseek_key_is_invalid(monkeypatch):

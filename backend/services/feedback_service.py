@@ -5,11 +5,13 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from backend.core.database import apply_sqlite_migrations
 from backend.core.paths import FEEDBACK_DB_PATH
 from backend.core.settings import get_settings
 
 
 runtime_settings = get_settings()
+FEEDBACK_SCHEMA_VERSION = 1
 
 
 class FeedbackService:
@@ -39,6 +41,25 @@ class FeedbackService:
         )
         return conn
 
+    @staticmethod
+    def _migrate_schema_v1(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                knowledge_base_id TEXT NOT NULL,
+                question TEXT NOT NULL,
+                answer TEXT NOT NULL,
+                rating TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                comment TEXT NOT NULL,
+                top_rerank_score REAL,
+                contexts_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
     def _ensure_db(self) -> None:
         if self._db_initialized:
             return
@@ -48,21 +69,10 @@ class FeedbackService:
             with self._connect() as conn:
                 conn.execute("PRAGMA journal_mode = WAL")
                 conn.execute("PRAGMA synchronous = NORMAL")
-                conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS feedback (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    knowledge_base_id TEXT NOT NULL,
-                    question TEXT NOT NULL,
-                    answer TEXT NOT NULL,
-                    rating TEXT NOT NULL,
-                    reason TEXT NOT NULL,
-                    comment TEXT NOT NULL,
-                    top_rerank_score REAL,
-                    contexts_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
-                """
+                apply_sqlite_migrations(
+                    conn,
+                    database_name="feedback database",
+                    migrations={1: self._migrate_schema_v1},
                 )
             self._db_initialized = True
 

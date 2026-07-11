@@ -23,6 +23,7 @@ def test_compose_defines_backend_frontend_and_persistent_model_cache():
 
     assert compose["x-backend-environment"]["HF_ENDPOINT"] == "${HF_ENDPOINT:-https://huggingface.co}"
     assert compose["x-backend-environment"]["MATHRAG_LOG_JSON"] == "${MATHRAG_LOG_JSON:-true}"
+    assert compose["x-backend-environment"]["MATHRAG_ALLOW_RUNTIME_API_KEY"] == "${MATHRAG_ALLOW_RUNTIME_API_KEY:-false}"
     assert compose["x-backend-environment"]["MATHRAG_JOB_MAX_ATTEMPTS"] == "${MATHRAG_JOB_MAX_ATTEMPTS:-3}"
     assert compose["x-backend-environment"]["MATHRAG_MAX_JSON_BODY_MB"] == "${MATHRAG_MAX_JSON_BODY_MB:-1}"
     assert compose["x-backend-environment"]["MATHRAG_LLM_TIMEOUT_SECONDS"] == "${MATHRAG_LLM_TIMEOUT_SECONDS:-30}"
@@ -66,3 +67,5 @@ def test_ci_checks_backend_and_frontend():
     )
 
     assert set(workflow["jobs"]) == {"backend-tests", "frontend-build"}
+    backend_steps = workflow["jobs"]["backend-tests"]["steps"]
+    assert any(step.get("run") == "docker compose config --quiet" for step in backend_steps)

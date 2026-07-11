@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 class SettingsStatusResponse(BaseModel):
     deepseek_api_key_configured: bool
     deepseek_base_url: str
+    runtime_api_key_update_allowed: bool
 
 
 class DeepSeekKeyRequest(BaseModel):

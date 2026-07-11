@@ -64,6 +64,7 @@ class BackendSettings:
     app_name: str
     app_version: str
     environment: str
+    allow_runtime_api_key: bool
     log_level: str
     log_json: bool
     cors_origins: tuple[str, ...]
@@ -84,6 +85,10 @@ class BackendSettings:
 
     @classmethod
     def from_env(cls) -> "BackendSettings":
+        environment = (
+            os.getenv("MATHRAG_ENVIRONMENT", "development").strip()
+            or "development"
+        )
         log_level = os.getenv("MATHRAG_LOG_LEVEL", "INFO").strip().upper()
         if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise SettingsError("MATHRAG_LOG_LEVEL is invalid")
@@ -96,9 +101,12 @@ class BackendSettings:
         )
         return cls(
             app_name="MathRAG API",
-            app_version="0.2.0",
-            environment=os.getenv("MATHRAG_ENVIRONMENT", "development").strip()
-            or "development",
+            app_version="0.3.1",
+            environment=environment,
+            allow_runtime_api_key=_read_bool(
+                "MATHRAG_ALLOW_RUNTIME_API_KEY",
+                environment.lower() != "production",
+            ),
             log_level=log_level,
             log_json=_read_bool("MATHRAG_LOG_JSON", True),
             cors_origins=_read_csv(
