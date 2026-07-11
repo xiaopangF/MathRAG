@@ -74,11 +74,43 @@ def test_model_prewarm_script_is_packaged_for_backend_image():
     assert "CrossEncoder(reranker_model)" in prewarm_script
 
 
-def test_ci_checks_backend_and_frontend():
+def test_ci_checks_supported_runtimes_and_docker_stack():
     workflow = yaml.safe_load(
         (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     )
 
-    assert set(workflow["jobs"]) == {"backend-tests", "frontend-build"}
-    backend_steps = workflow["jobs"]["backend-tests"]["steps"]
-    assert any(step.get("run") == "docker compose config --quiet" for step in backend_steps)
+    assert set(workflow["jobs"]) == {
+        "backend-tests",
+        "frontend-build",
+        "docker-smoke",
+    }
+
+    backend_job = workflow["jobs"]["backend-tests"]
+    matrix = backend_job["strategy"]["matrix"]["include"]
+    runtimes = {(entry["os"], entry["python-version"]) for entry in matrix}
+    assert runtimes == {
+        ("ubuntu-latest", "3.11"),
+        ("ubuntu-latest", "3.12"),
+        ("windows-latest", "3.12"),
+    }
+    assert sum(entry["run-integration"] for entry in matrix) == 1
+
+    backend_steps = backend_job["steps"]
+    assert any(step.get("run") == "python -m pip check" for step in backend_steps)
+    assert any(step.get("name") == "Run PDF integration tests" for step in backend_steps)
+    assert any(step.get("name") == "Upload backend test results" for step in backend_steps)
+
+    frontend_steps = workflow["jobs"]["frontend-build"]["steps"]
+    assert any(step.get("name") == "Upload frontend build" for step in frontend_steps)
+
+    smoke_job = workflow["jobs"]["docker-smoke"]
+    smoke_steps = smoke_job["steps"]
+    assert set(smoke_job["needs"]) == {"backend-tests", "frontend-build"}
+    assert any(step.get("run") == "docker compose config --quiet" for step in smoke_steps)
+    assert any("docker compose up" in step.get("run", "") for step in smoke_steps)
+    assert any("127.0.0.1:5173/health" in step.get("run", "") for step in smoke_steps)
+    assert any(
+        step.get("run") == "docker compose down --remove-orphans"
+        and step.get("if") == "always()"
+        for step in smoke_steps
+    )

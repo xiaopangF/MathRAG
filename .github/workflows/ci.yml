@@ -8,31 +8,68 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    name: Backend (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+            run-integration: false
+          - os: ubuntu-latest
+            python-version: "3.12"
+            run-integration: true
+          - os: windows-latest
+            python-version: "3.12"
+            run-integration: false
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Validate Docker Compose configuration
-        run: docker compose config --quiet
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
       - name: Install Python dependencies
         run: python -m pip install -r requirements-dev.txt
 
+      - name: Check Python dependency consistency
+        run: python -m pip check
+
       - name: Run unit tests
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python -m pytest -p no:cacheprovider -m "not integration"
+        run: >-
+          python -m pytest -p no:cacheprovider -m "not integration"
+          --junitxml=test-results/unit-${{ matrix.os }}-py${{ matrix.python-version }}.xml
+
+      - name: Run PDF integration tests
+        if: matrix.run-integration
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: >-
+          python -m pytest -p no:cacheprovider -m integration
+          --junitxml=test-results/integration.xml
+
+      - name: Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: test-results/*.xml
+          if-no-files-found: error
+          retention-days: 14
 
   frontend-build:
     runs-on: ubuntu-latest
@@ -56,3 +93,46 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  docker-smoke:
+    name: Docker Compose smoke test
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    needs:
+      - backend-tests
+      - frontend-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build and start application
+        run: docker compose up -d --build --wait --wait-timeout 180 backend frontend
+
+      - name: Verify backend and frontend endpoints
+        run: |
+          curl --fail --show-error --retry 5 --retry-all-errors http://127.0.0.1:8000/health
+          curl --fail --show-error --retry 5 --retry-all-errors http://127.0.0.1:8000/api/readiness
+          curl --fail --show-error --retry 5 --retry-all-errors http://127.0.0.1:5173/
+          curl --fail --show-error --retry 5 --retry-all-errors http://127.0.0.1:5173/health
+
+      - name: Show container diagnostics
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color
+
+      - name: Stop application
+        if: always()
+        run: docker compose down --remove-orphans
