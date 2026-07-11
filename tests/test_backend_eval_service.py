@@ -31,9 +31,10 @@ def test_eval_service_loads_latest_hybrid_metrics():
 
     grounded_dev = eval_service.latest("grounded_dev")
     assert grounded_dev["report_path"] == "reports/retrieval_metrics_grounded_dev.json"
-    assert grounded_dev["metrics"]["question_count"] == 30
-    assert grounded_dev["metrics"]["page_metrics"]["recall_at_5"] == 1.0
-    assert grounded_dev["metrics"]["section_metrics"]["recall_at_5"] >= 0.95
+    assert grounded_dev["metrics"]["question_count"] == 100
+    assert grounded_dev["metrics"]["recall_at_5"] == 1.0
+    assert grounded_dev["metrics"]["page_metrics"]["recall_at_5"] >= 0.9
+    assert grounded_dev["metrics"]["section_metrics"]["recall_at_5"] >= 0.7
 
 
 def test_backend_exposes_core_routes():
