@@ -22,6 +22,10 @@ SECTION_PATTERN = re.compile(
     r'^\s*[一二三四五六七八九十百千万\d]+[、.．]\s*[^\n]{0,50}',
     re.MULTILINE
 )
+SECTION_SYMBOL_PATTERN = re.compile(
+    r'^\s*§\s*\d+(?:\.\s*\d+)+\s*[^\n]{0,80}',
+    re.MULTILINE,
+)
 SUBSECTION_PATTERN = re.compile(
     r'^\s*[（(][一二三四五六七八九十\d]+[）)]\s*[^\n]{0,50}',
     re.MULTILINE
@@ -31,6 +35,10 @@ UNIT_PATTERN = re.compile(
     re.MULTILINE
 )
 PAGE_MARKER_PATTERN = re.compile(r'^\s*\[PAGE\s+(\d+)\]\s*$', re.IGNORECASE)
+CHAPTER_KEY_PATTERN = re.compile(r'第[一二三四五六七八九十百千万\d]+章')
+CHAPTER_ONLY_PATTERN = re.compile(r'^\s*第[一二三四五六七八九十百千万\d]+章\s*$')
+SECTION_PREFIX_PATTERN = re.compile(r'^\s*(?:[一二三四五六七八九十百千万\d]+[、.．]|[（(][一二三四五六七八九十\d]+[）)]|§\s*\d+(?:\.\s*\d+)+)\s*')
+PAGE_DECORATION_PATTERN = re.compile(r'^[·\s\d+\-—–,，.。+!！#%&()*（）]+$')
 
 
 def normalize_text(text: str) -> str:
@@ -58,6 +66,58 @@ def apply_page_to_chunk(chunk: Dict[str, Any] | None, page: int | None) -> None:
     chunk["page_end"] = page
 
 
+def chapter_key(title: str) -> str:
+    """Return the stable chapter label, e.g. 第六章."""
+    match = CHAPTER_KEY_PATTERN.search(title or "")
+    return match.group(0) if match else ""
+
+
+def has_meaningful_title_text(title: str) -> bool:
+    """Reject bare exercise/list markers such as 11. or (4)."""
+    stripped = SECTION_PREFIX_PATTERN.sub("", title or "").strip()
+    if not stripped:
+        return False
+    if PAGE_DECORATION_PATTERN.fullmatch(stripped):
+        return False
+    return bool(re.search(r'[\u4e00-\u9fffA-Za-z]', stripped))
+
+
+def is_chapter_subtitle_line(line: str) -> bool:
+    """Detect a short line that is likely the subtitle after a split chapter label."""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if len(stripped) > 30:
+        return False
+    if PAGE_MARKER_PATTERN.match(stripped):
+        return False
+    if PAGE_DECORATION_PATTERN.fullmatch(stripped):
+        return False
+    if CHAPTER_PATTERN.match(stripped):
+        return False
+    if SECTION_PATTERN.match(stripped) or SECTION_SYMBOL_PATTERN.match(stripped):
+        return False
+    if SUBSECTION_PATTERN.match(stripped) or UNIT_PATTERN.match(stripped):
+        return False
+    return bool(re.search(r'[\u4e00-\u9fff]', stripped))
+
+
+def build_chapter_title(lines: list[str], index: int) -> tuple[str, int]:
+    """
+    Combine split chapter headers like:
+    第二章
+    一元函数微分学
+    """
+    title = lines[index].strip()
+    consumed = 1
+    if CHAPTER_ONLY_PATTERN.match(title) and index + 1 < len(lines):
+        next_line = lines[index + 1].strip()
+        if is_chapter_subtitle_line(next_line):
+            title = f"{title} {next_line}"
+            consumed = 2
+    return title, consumed
+
+
 def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
     """
     根据标题层级切分全文，返回 chunks 列表。
@@ -78,22 +138,34 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
         line = line.strip()
         if CHAPTER_PATTERN.match(line):
             return (0, line)
-        if SECTION_PATTERN.match(line):
+        if SECTION_PATTERN.match(line) and has_meaningful_title_text(line):
             return (1, line)
-        if SUBSECTION_PATTERN.match(line):
+        if SECTION_SYMBOL_PATTERN.match(line) and has_meaningful_title_text(line):
+            return (1, line)
+        if SUBSECTION_PATTERN.match(line) and has_meaningful_title_text(line):
             return (2, line)
         if UNIT_PATTERN.match(line):
             return (3, line)
         return (-1, None)
 
-    for line_no, line in enumerate(lines):
+    line_no = 0
+    while line_no < len(lines):
+        line = lines[line_no]
         page_match = PAGE_MARKER_PATTERN.match(line)
         if page_match:
             current_page = int(page_match.group(1))
+            line_no += 1
             continue
 
         level, title = get_title_level(line)
         if level >= 0:
+            consumed_lines = 1
+            if level == 0:
+                title, consumed_lines = build_chapter_title(lines, line_no)
+                if current_chapter and chapter_key(title) == chapter_key(current_chapter):
+                    line_no += consumed_lines
+                    continue
+
             # 新标题开始，保存上一个chunk
             if current_chunk:
                 chunks.append(current_chunk)
@@ -112,6 +184,7 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
                 'chapter': current_chapter,
                 'section': current_section,
             }
+            line_no += consumed_lines
         else:
             # 普通内容行
             if current_chunk:
@@ -132,6 +205,7 @@ def smart_split_by_titles(full_text: str) -> List[Dict[str, Any]]:
                     }
                 current_chunk['content'] += line + '\n'
                 apply_page_to_chunk(current_chunk, current_page)
+            line_no += 1
 
     # 保存最后一个
     if current_chunk:

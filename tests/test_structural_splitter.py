@@ -69,6 +69,55 @@ def test_smart_split_inherits_chapter_and_most_specific_section():
     assert chunks[5]["section"] == ""
 
 
+def test_smart_split_ignores_repeated_split_chapter_page_header():
+    text = """[PAGE 155]
+第二章
+一元函数微分学
+二、微分中值定理
+定理 罗尔定理
+函数在闭区间连续，在开区间可导。
+[PAGE 156]
+第二章
+一元函数微分学
+罗尔定理的几何意义是切线平行于横轴。
+"""
+
+    chunks = smart_split_by_titles(text)
+
+    assert [chunk["title"] for chunk in chunks] == [
+        "第二章 一元函数微分学",
+        "二、微分中值定理",
+        "定理 罗尔定理",
+    ]
+    assert chunks[-1]["page_start"] == 155
+    assert chunks[-1]["page_end"] == 156
+    assert chunks[-1]["chapter"] == "第二章 一元函数微分学"
+    assert chunks[-1]["section"] == "二、微分中值定理"
+    assert "罗尔定理的几何意义" in chunks[-1]["content"]
+
+
+def test_smart_split_does_not_treat_bare_exercise_numbers_as_sections():
+    text = """[PAGE 430]
+第五章 多元函数微分学
+七、多元函数的连续性
+连续函数有最大最小值定理。
+11.
+这是习题编号，不是小节标题。
+（4）
+这也是编号。
+"""
+
+    chunks = smart_split_by_titles(text)
+
+    assert [chunk["title"] for chunk in chunks] == [
+        "第五章 多元函数微分学",
+        "七、多元函数的连续性",
+    ]
+    assert "11." in chunks[-1]["content"]
+    assert "（4）" in chunks[-1]["content"]
+    assert chunks[-1]["section"] == "七、多元函数的连续性"
+
+
 def test_saved_child_metadata_keeps_inherited_structure(tmp_path):
     chunks = smart_split_by_titles(
         """第二章 一元函数微分学
