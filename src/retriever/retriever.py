@@ -65,6 +65,7 @@ class RAGConfig:
     top_k_rerank: int = 3
     rerank_batch_size: int = 32
     use_hybrid_search: bool = True
+    use_reranker: bool = True
     rrf_k: int = 60
     rrf_weight: float = 1.0
     use_gpu: bool = False  # 设为 True 时会尝试使用 GPU
@@ -140,6 +141,11 @@ class MathRAGRetriever:
             "Embedding 模型",
         )
 
+        if not getattr(self.config, "use_reranker", True):
+            print("🚀 Reranker 已禁用，使用一阶段融合分数排序")
+            self.reranker = None
+            return
+
         print(f"🚀 加载 Reranker 模型: {self.config.reranker_model}")
         self.reranker = load_model_cache_first(
             CrossEncoder,
@@ -153,7 +159,8 @@ class MathRAGRetriever:
                 import torch
                 if torch.cuda.is_available():
                     self.embed_model.to('cuda')
-                    self.reranker.model.to('cuda')
+                    if self.reranker is not None:
+                        self.reranker.model.to('cuda')
                     print("   ✅ 已启用 GPU")
                 else:
                     print("   ⚠️ GPU 不可用，使用 CPU")
@@ -222,7 +229,8 @@ class MathRAGRetriever:
         return (
             f"{query.strip().lower()}_{top_k}_"
             f"emb{self.config.top_k_embedding}_bm25{self.config.top_k_bm25}_"
-            f"rrf{self.config.rrf_k}_{self.config.rrf_weight}"
+            f"rrf{self.config.rrf_k}_{self.config.rrf_weight}_"
+            f"reranker{getattr(self.config, 'use_reranker', True)}"
         )
 
     def _is_cache_valid(self, key: str) -> bool:
@@ -293,6 +301,10 @@ class MathRAGRetriever:
     def _apply_retrieval_scores(self, candidates: list[dict[str, Any]]) -> None:
         """Blend reranker score with a lightweight RRF prior."""
         for candidate in candidates:
+            if not getattr(self.config, "use_reranker", True):
+                candidate["rerank_score"] = 0.0
+                candidate["retrieval_score"] = candidate.get("fusion_score", 0.0)
+                continue
             candidate["retrieval_score"] = (
                 candidate["rerank_score"]
                 + self.config.rrf_weight * candidate.get("fusion_score", 0.0)
@@ -376,17 +388,18 @@ class MathRAGRetriever:
             return []
 
         # ---------- 第二阶段：Reranker 精排 ----------
-        pairs = [
-            (query, build_ranking_text(c["content"], c["metadata"]))
-            for c in candidates
-        ]
-        rerank_scores = self.reranker.predict(
-            pairs,
-            batch_size=self.config.rerank_batch_size,
-        )
+        if getattr(self.config, "use_reranker", True):
+            pairs = [
+                (query, build_ranking_text(c["content"], c["metadata"]))
+                for c in candidates
+            ]
+            rerank_scores = self.reranker.predict(
+                pairs,
+                batch_size=self.config.rerank_batch_size,
+            )
 
-        for candidate, score in zip(candidates, rerank_scores):
-            candidate["rerank_score"] = float(score)
+            for candidate, score in zip(candidates, rerank_scores):
+                candidate["rerank_score"] = float(score)
         self._apply_retrieval_scores(candidates)
 
         candidates.sort(key=lambda x: x["retrieval_score"], reverse=True)
@@ -466,7 +479,7 @@ class MathRAGRetriever:
             pair_ranges.append((start, end))
             batch_candidates.append(candidates)
 
-        if all_pairs:
+        if getattr(self.config, "use_reranker", True) and all_pairs:
             all_rerank_scores = self.reranker.predict(
                 all_pairs,
                 batch_size=self.config.rerank_batch_size,
@@ -476,8 +489,9 @@ class MathRAGRetriever:
 
         batch_results = []
         for candidates, (start, end) in zip(batch_candidates, pair_ranges):
-            for candidate, score in zip(candidates, all_rerank_scores[start:end]):
-                candidate["rerank_score"] = float(score)
+            if getattr(self.config, "use_reranker", True):
+                for candidate, score in zip(candidates, all_rerank_scores[start:end]):
+                    candidate["rerank_score"] = float(score)
             self._apply_retrieval_scores(candidates)
             candidates.sort(key=lambda x: x["retrieval_score"], reverse=True)
             batch_results.append([

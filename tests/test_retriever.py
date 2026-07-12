@@ -135,6 +135,43 @@ def test_retrieve_uses_rrf_fusion_as_rerank_prior():
     assert results[0].retrieval_score == results[0].fusion_score
 
 
+def test_retrieve_can_disable_reranker_and_rank_by_fusion():
+    metadata = {
+        1: {"text": "只被向量召回的内容", "title": "向量候选"},
+        2: {"text": "同时被向量和 BM25 召回的内容", "title": "融合候选"},
+        3: {"text": "只被 BM25 靠前召回的内容", "title": "词法候选"},
+        4: {"text": "向量靠后召回的内容", "title": "向量候选二"},
+    }
+    retriever = MathRAGRetriever.__new__(MathRAGRetriever)
+    retriever.config = SimpleNamespace(
+        top_k_rerank=3,
+        top_k_embedding=3,
+        top_k_bm25=2,
+        rerank_batch_size=8,
+        rrf_k=60,
+        rrf_weight=1.0,
+        use_reranker=False,
+        cache_enabled=False,
+        cache_ttl=300,
+    )
+    retriever.embed_model = RecordingEmbedder()
+    retriever.index = StaticIndex()
+    retriever.metadata_by_vector_id = metadata
+    retriever.bm25_retriever = StaticBM25(metadata)
+    retriever.reranker = SimpleNamespace(
+        predict=lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("reranker should not be called")
+        )
+    )
+    retriever._cache = {}
+
+    results = retriever.retrieve("融合查询", top_k=3)
+
+    assert [item.vector_id for item in results] == [2, 1, 3]
+    assert all(item.rerank_score == 0.0 for item in results)
+    assert results[0].retrieval_score == results[0].fusion_score
+
+
 def test_model_loading_prefers_local_cache():
     calls = []
 
