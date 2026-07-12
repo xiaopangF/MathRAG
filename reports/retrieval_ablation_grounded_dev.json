@@ -1,0 +1,306 @@
+{
+  "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+  "index_dir": "data\\faiss_index",
+  "variants": [
+    {
+      "name": "full",
+      "description": "Embedding + BM25 + RRF + Reranker",
+      "config": {
+        "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+        "index_dir": "data\\faiss_index",
+        "top_k": 5,
+        "top_k_embedding": 20,
+        "top_k_bm25": 20,
+        "rerank_batch_size": 64,
+        "rrf_k": 60,
+        "rrf_weight": 1.0,
+        "use_hybrid_search": true,
+        "use_reranker": true,
+        "use_gpu": false
+      },
+      "metrics": {
+        "keyword": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.8947368421052632,
+          "recall_at_3": 0.9894736842105263,
+          "recall_at_5": 1.0,
+          "mrr": 0.9412280701754386,
+          "hits": {
+            "hit_at_1": 85,
+            "hit_at_3": 94,
+            "hit_at_5": 95
+          }
+        },
+        "page": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.5578947368421052,
+          "recall_at_3": 0.8210526315789474,
+          "recall_at_5": 0.9157894736842105,
+          "mrr": 0.6907017543859648,
+          "hits": {
+            "hit_at_1": 53,
+            "hit_at_3": 78,
+            "hit_at_5": 87
+          }
+        },
+        "section": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.6526315789473685,
+          "recall_at_3": 0.8105263157894737,
+          "recall_at_5": 0.8210526315789474,
+          "mrr": 0.7214035087719298,
+          "hits": {
+            "hit_at_1": 62,
+            "hit_at_3": 77,
+            "hit_at_5": 78
+          }
+        },
+        "failed_counts": {
+          "keyword": 0,
+          "page": 8,
+          "section": 17
+        }
+      }
+    },
+    {
+      "name": "no_rrf",
+      "description": "Embedding + BM25 + Reranker, without RRF prior",
+      "config": {
+        "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+        "index_dir": "data\\faiss_index",
+        "top_k": 5,
+        "top_k_embedding": 20,
+        "top_k_bm25": 20,
+        "rerank_batch_size": 64,
+        "rrf_k": 60,
+        "rrf_weight": 0.0,
+        "use_hybrid_search": true,
+        "use_reranker": true,
+        "use_gpu": false
+      },
+      "metrics": {
+        "keyword": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.8631578947368421,
+          "recall_at_3": 0.9789473684210527,
+          "recall_at_5": 0.9894736842105263,
+          "mrr": 0.9219298245614035,
+          "hits": {
+            "hit_at_1": 82,
+            "hit_at_3": 93,
+            "hit_at_5": 94
+          }
+        },
+        "page": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.5894736842105263,
+          "recall_at_3": 0.8210526315789474,
+          "recall_at_5": 0.8947368421052632,
+          "mrr": 0.7040350877192983,
+          "hits": {
+            "hit_at_1": 56,
+            "hit_at_3": 78,
+            "hit_at_5": 85
+          }
+        },
+        "section": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.6526315789473685,
+          "recall_at_3": 0.8,
+          "recall_at_5": 0.8210526315789474,
+          "mrr": 0.7222807017543859,
+          "hits": {
+            "hit_at_1": 62,
+            "hit_at_3": 76,
+            "hit_at_5": 78
+          }
+        },
+        "failed_counts": {
+          "keyword": 1,
+          "page": 10,
+          "section": 17
+        }
+      }
+    },
+    {
+      "name": "no_bm25",
+      "description": "Embedding + RRF prior + Reranker, without BM25 candidates",
+      "config": {
+        "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+        "index_dir": "data\\faiss_index",
+        "top_k": 5,
+        "top_k_embedding": 20,
+        "top_k_bm25": 20,
+        "rerank_batch_size": 64,
+        "rrf_k": 60,
+        "rrf_weight": 1.0,
+        "use_hybrid_search": false,
+        "use_reranker": true,
+        "use_gpu": false
+      },
+      "metrics": {
+        "keyword": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.8631578947368421,
+          "recall_at_3": 0.9578947368421052,
+          "recall_at_5": 0.9789473684210527,
+          "mrr": 0.9152631578947369,
+          "hits": {
+            "hit_at_1": 82,
+            "hit_at_3": 91,
+            "hit_at_5": 93
+          }
+        },
+        "page": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.5789473684210527,
+          "recall_at_3": 0.8105263157894737,
+          "recall_at_5": 0.9052631578947369,
+          "mrr": 0.6964912280701755,
+          "hits": {
+            "hit_at_1": 55,
+            "hit_at_3": 77,
+            "hit_at_5": 86
+          }
+        },
+        "section": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.631578947368421,
+          "recall_at_3": 0.7894736842105263,
+          "recall_at_5": 0.8,
+          "mrr": 0.6991228070175439,
+          "hits": {
+            "hit_at_1": 60,
+            "hit_at_3": 75,
+            "hit_at_5": 76
+          }
+        },
+        "failed_counts": {
+          "keyword": 2,
+          "page": 9,
+          "section": 19
+        }
+      }
+    },
+    {
+      "name": "no_reranker",
+      "description": "Embedding + BM25 + RRF, without second-stage reranker",
+      "config": {
+        "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+        "index_dir": "data\\faiss_index",
+        "top_k": 5,
+        "top_k_embedding": 20,
+        "top_k_bm25": 20,
+        "rerank_batch_size": 64,
+        "rrf_k": 60,
+        "rrf_weight": 1.0,
+        "use_hybrid_search": true,
+        "use_reranker": false,
+        "use_gpu": false
+      },
+      "metrics": {
+        "keyword": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.8210526315789474,
+          "recall_at_3": 0.9263157894736842,
+          "recall_at_5": 0.9578947368421052,
+          "mrr": 0.8710526315789474,
+          "hits": {
+            "hit_at_1": 78,
+            "hit_at_3": 88,
+            "hit_at_5": 91
+          }
+        },
+        "page": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.4421052631578947,
+          "recall_at_3": 0.7368421052631579,
+          "recall_at_5": 0.8526315789473684,
+          "mrr": 0.6005263157894737,
+          "hits": {
+            "hit_at_1": 42,
+            "hit_at_3": 70,
+            "hit_at_5": 81
+          }
+        },
+        "section": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.5052631578947369,
+          "recall_at_3": 0.7052631578947368,
+          "recall_at_5": 0.7473684210526316,
+          "mrr": 0.6029824561403508,
+          "hits": {
+            "hit_at_1": 48,
+            "hit_at_3": 67,
+            "hit_at_5": 71
+          }
+        },
+        "failed_counts": {
+          "keyword": 4,
+          "page": 14,
+          "section": 24
+        }
+      }
+    },
+    {
+      "name": "narrow_recall",
+      "description": "Full pipeline with first-stage candidate depth reduced to 5 + 5",
+      "config": {
+        "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+        "index_dir": "data\\faiss_index",
+        "top_k": 5,
+        "top_k_embedding": 5,
+        "top_k_bm25": 5,
+        "rerank_batch_size": 64,
+        "rrf_k": 60,
+        "rrf_weight": 1.0,
+        "use_hybrid_search": true,
+        "use_reranker": true,
+        "use_gpu": false
+      },
+      "metrics": {
+        "keyword": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.9368421052631579,
+          "recall_at_3": 0.9789473684210527,
+          "recall_at_5": 0.9894736842105263,
+          "mrr": 0.9587719298245614,
+          "hits": {
+            "hit_at_1": 89,
+            "hit_at_3": 93,
+            "hit_at_5": 94
+          }
+        },
+        "page": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.5578947368421052,
+          "recall_at_3": 0.8105263157894737,
+          "recall_at_5": 0.8842105263157894,
+          "mrr": 0.6822807017543859,
+          "hits": {
+            "hit_at_1": 53,
+            "hit_at_3": 77,
+            "hit_at_5": 84
+          }
+        },
+        "section": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.6526315789473685,
+          "recall_at_3": 0.7684210526315789,
+          "recall_at_5": 0.7789473684210526,
+          "mrr": 0.706140350877193,
+          "hits": {
+            "hit_at_1": 62,
+            "hit_at_3": 73,
+            "hit_at_5": 74
+          }
+        },
+        "failed_counts": {
+          "keyword": 1,
+          "page": 11,
+          "section": 21
+        }
+      }
+    }
+  ]
+}

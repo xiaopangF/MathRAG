@@ -39,6 +39,7 @@ reports/*
 !reports/retrieval_metrics_100_vector_only.json
 !reports/retrieval_metrics_grounded_dev.json
 !reports/retrieval_metrics_grounded_sample.json
+!reports/retrieval_ablation_grounded_dev.json
 
 # model / index artifacts
 *.faiss
