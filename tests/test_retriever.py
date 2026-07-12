@@ -7,6 +7,7 @@ from src.retriever.retriever import (
     build_ranking_text,
     load_model_cache_first,
 )
+from src.retriever.bm25_retriever import BM25Result
 
 
 class RecordingEmbedder:
@@ -25,6 +26,25 @@ class EmptyIndex:
             np.zeros((count, top_k), dtype=np.float32),
             np.full((count, top_k), -1, dtype=np.int64),
         )
+
+
+class StaticIndex:
+    def search(self, query_embeddings, top_k):
+        count = len(query_embeddings)
+        scores = np.array([[0.9, 0.8, 0.7][:top_k]] * count, dtype=np.float32)
+        indices = np.array([[1, 2, 4][:top_k]] * count, dtype=np.int64)
+        return scores, indices
+
+
+class StaticBM25:
+    def __init__(self, metadata):
+        self.metadata = metadata
+
+    def retrieve(self, query, top_k=20):
+        return [
+            BM25Result(vector_id=2, score=10.0, metadata=self.metadata[2]),
+            BM25Result(vector_id=3, score=8.0, metadata=self.metadata[3]),
+        ][:top_k]
 
 
 def test_build_ranking_text_includes_title_without_mutating_content():
@@ -77,6 +97,42 @@ def test_batch_retrieve_normalizes_math_queries_before_embedding():
     assert results == [[]]
     assert "integral" in retriever.embed_model.sentences[0]
     assert "^(2)" in retriever.embed_model.sentences[0]
+
+
+def test_retrieve_uses_rrf_fusion_as_rerank_prior():
+    metadata = {
+        1: {"text": "只被向量召回的内容", "title": "向量候选"},
+        2: {"text": "同时被向量和BM25召回的内容", "title": "融合候选"},
+        3: {"text": "只被BM25靠前召回的内容", "title": "词法候选"},
+        4: {"text": "向量靠后召回的内容", "title": "向量候选二"},
+    }
+    retriever = MathRAGRetriever.__new__(MathRAGRetriever)
+    retriever.config = SimpleNamespace(
+        top_k_rerank=3,
+        top_k_embedding=3,
+        top_k_bm25=2,
+        rerank_batch_size=8,
+        rrf_k=60,
+        rrf_weight=1.0,
+        cache_enabled=False,
+        cache_ttl=300,
+    )
+    retriever.embed_model = RecordingEmbedder()
+    retriever.index = StaticIndex()
+    retriever.metadata_by_vector_id = metadata
+    retriever.bm25_retriever = StaticBM25(metadata)
+    retriever.reranker = SimpleNamespace(
+        predict=lambda pairs, **kwargs: [0.0] * len(pairs)
+    )
+    retriever._cache = {}
+
+    results = retriever.retrieve("融合查询", top_k=3)
+
+    assert [item.vector_id for item in results] == [2, 1, 3]
+    assert results[0].embedding_rank == 2
+    assert results[0].bm25_rank == 1
+    assert results[0].fusion_score > results[1].fusion_score
+    assert results[0].retrieval_score == results[0].fusion_score
 
 
 def test_model_loading_prefers_local_cache():
