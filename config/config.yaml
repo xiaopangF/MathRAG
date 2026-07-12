@@ -16,6 +16,8 @@ retrieval:
   top_k_rerank: 3
   rerank_batch_size: 64
   use_hybrid_search: true
+  rrf_k: 60
+  rrf_weight: 1.0
   use_gpu: false
   cache_enabled: true
   cache_ttl: 300

@@ -65,6 +65,8 @@ class RAGConfig:
     top_k_rerank: int = 3
     rerank_batch_size: int = 32
     use_hybrid_search: bool = True
+    rrf_k: int = 60
+    rrf_weight: float = 1.0
     use_gpu: bool = False  # 设为 True 时会尝试使用 GPU
     cache_enabled: bool = True
     cache_ttl: int = 300  # 秒
@@ -72,6 +74,10 @@ class RAGConfig:
     def __post_init__(self):
         if self.top_k_embedding < self.top_k_rerank:
             raise ValueError("top_k_embedding 必须大于等于 top_k_rerank")
+        if self.rrf_k < 1:
+            raise ValueError("rrf_k 必须大于等于 1")
+        if self.rrf_weight < 0:
+            raise ValueError("rrf_weight 不能为负数")
 
     @property
     def index_path(self) -> Path:
@@ -90,6 +96,10 @@ class RetrievedChunk:
     embedding_score: float
     vector_id: int
     bm25_score: float = 0.0
+    fusion_score: float = 0.0
+    retrieval_score: float = 0.0
+    embedding_rank: int | None = None
+    bm25_rank: int | None = None
     title: str = ""
     parent_id: str = ""
     chapter: str = ""
@@ -209,7 +219,11 @@ class MathRAGRetriever:
         return np.asarray(emb, dtype=np.float32)
 
     def _get_cache_key(self, query: str, top_k: int) -> str:
-        return f"{query.strip().lower()}_{top_k}"
+        return (
+            f"{query.strip().lower()}_{top_k}_"
+            f"emb{self.config.top_k_embedding}_bm25{self.config.top_k_bm25}_"
+            f"rrf{self.config.rrf_k}_{self.config.rrf_weight}"
+        )
 
     def _is_cache_valid(self, key: str) -> bool:
         if not self.config.cache_enabled:
@@ -224,6 +238,8 @@ class MathRAGRetriever:
         vector_id: int,
         embedding_score: float = 0.0,
         bm25_score: float = 0.0,
+        embedding_rank: int | None = None,
+        bm25_rank: int | None = None,
     ) -> dict[str, Any] | None:
         meta = self.metadata_by_vector_id.get(vector_id)
         if not meta:
@@ -238,6 +254,8 @@ class MathRAGRetriever:
             "content": content,
             "embedding_score": float(embedding_score),
             "bm25_score": float(bm25_score),
+            "embedding_rank": embedding_rank,
+            "bm25_rank": bm25_rank,
             "metadata": meta,
         }
 
@@ -253,6 +271,32 @@ class MathRAGRetriever:
             return
         existing["embedding_score"] = max(existing["embedding_score"], candidate["embedding_score"])
         existing["bm25_score"] = max(existing["bm25_score"], candidate["bm25_score"])
+        for rank_field in ("embedding_rank", "bm25_rank"):
+            rank = candidate.get(rank_field)
+            if rank is None:
+                continue
+            existing_rank = existing.get(rank_field)
+            existing[rank_field] = rank if existing_rank is None else min(existing_rank, rank)
+
+    def _apply_fusion_scores(self, candidates: list[dict[str, Any]]) -> None:
+        """Compute RRF fusion score from embedding and BM25 ranks."""
+        for candidate in candidates:
+            fusion_score = 0.0
+            embedding_rank = candidate.get("embedding_rank")
+            bm25_rank = candidate.get("bm25_rank")
+            if embedding_rank is not None:
+                fusion_score += 1.0 / (self.config.rrf_k + embedding_rank)
+            if bm25_rank is not None:
+                fusion_score += 1.0 / (self.config.rrf_k + bm25_rank)
+            candidate["fusion_score"] = fusion_score
+
+    def _apply_retrieval_scores(self, candidates: list[dict[str, Any]]) -> None:
+        """Blend reranker score with a lightweight RRF prior."""
+        for candidate in candidates:
+            candidate["retrieval_score"] = (
+                candidate["rerank_score"]
+                + self.config.rrf_weight * candidate.get("fusion_score", 0.0)
+            )
 
     def _build_retrieved_chunk(self, candidate: dict[str, Any]) -> RetrievedChunk:
         meta = candidate["metadata"]
@@ -261,6 +305,10 @@ class MathRAGRetriever:
             rerank_score=candidate["rerank_score"],
             embedding_score=candidate["embedding_score"],
             bm25_score=candidate.get("bm25_score", 0.0),
+            fusion_score=candidate.get("fusion_score", 0.0),
+            retrieval_score=candidate.get("retrieval_score", candidate["rerank_score"]),
+            embedding_rank=candidate.get("embedding_rank"),
+            bm25_rank=candidate.get("bm25_rank"),
             vector_id=candidate["vector_id"],
             title=meta.get("title", ""),
             parent_id=meta.get("parent_id", ""),
@@ -296,23 +344,33 @@ class MathRAGRetriever:
         query_emb = self._encode_query(query)
         scores, indices = self.index.search(query_emb, self.config.top_k_embedding)
 
-        for vector_id, emb_score in zip(indices[0], scores[0]):
+        for rank, (vector_id, emb_score) in enumerate(zip(indices[0], scores[0]), start=1):
             vector_id = int(vector_id)
             if vector_id < 0:
                 continue
 
-            candidate = self._candidate_from_meta(vector_id, embedding_score=float(emb_score))
+            candidate = self._candidate_from_meta(
+                vector_id,
+                embedding_score=float(emb_score),
+                embedding_rank=rank,
+            )
             if candidate:
                 self._merge_candidate(candidates_by_id, candidate)
 
         if self.bm25_retriever is not None:
             bm25_results = self.bm25_retriever.retrieve(query, top_k=self.config.top_k_bm25)
-            for item in bm25_results:
-                candidate = self._candidate_from_meta(item.vector_id, bm25_score=item.score)
+            for rank, item in enumerate(bm25_results, start=1):
+                candidate = self._candidate_from_meta(
+                    item.vector_id,
+                    bm25_score=item.score,
+                    bm25_rank=rank,
+                )
                 if candidate:
                     self._merge_candidate(candidates_by_id, candidate)
 
         candidates = list(candidates_by_id.values())
+        self._apply_fusion_scores(candidates)
+        candidates.sort(key=lambda x: x["fusion_score"], reverse=True)
 
         if not candidates:
             return []
@@ -329,8 +387,9 @@ class MathRAGRetriever:
 
         for candidate, score in zip(candidates, rerank_scores):
             candidate["rerank_score"] = float(score)
+        self._apply_retrieval_scores(candidates)
 
-        candidates.sort(key=lambda x: x["rerank_score"], reverse=True)
+        candidates.sort(key=lambda x: x["retrieval_score"], reverse=True)
 
         # ---------- 构建返回结果 ----------
         results = [self._build_retrieved_chunk(c) for c in candidates[:top_k]]
@@ -371,23 +430,33 @@ class MathRAGRetriever:
 
         for q, scores, indices in zip(queries, all_scores, all_indices):
             candidates_by_id: dict[int, dict[str, Any]] = {}
-            for vector_id, emb_score in zip(indices, scores):
+            for rank, (vector_id, emb_score) in enumerate(zip(indices, scores), start=1):
                 vector_id = int(vector_id)
                 if vector_id < 0:
                     continue
 
-                candidate = self._candidate_from_meta(vector_id, embedding_score=float(emb_score))
+                candidate = self._candidate_from_meta(
+                    vector_id,
+                    embedding_score=float(emb_score),
+                    embedding_rank=rank,
+                )
                 if candidate:
                     self._merge_candidate(candidates_by_id, candidate)
 
             if self.bm25_retriever is not None:
                 bm25_results = self.bm25_retriever.retrieve(q, top_k=self.config.top_k_bm25)
-                for item in bm25_results:
-                    candidate = self._candidate_from_meta(item.vector_id, bm25_score=item.score)
+                for rank, item in enumerate(bm25_results, start=1):
+                    candidate = self._candidate_from_meta(
+                        item.vector_id,
+                        bm25_score=item.score,
+                        bm25_rank=rank,
+                    )
                     if candidate:
                         self._merge_candidate(candidates_by_id, candidate)
 
             candidates = list(candidates_by_id.values())
+            self._apply_fusion_scores(candidates)
+            candidates.sort(key=lambda x: x["fusion_score"], reverse=True)
             start = len(all_pairs)
             all_pairs.extend(
                 (q, build_ranking_text(c["content"], c["metadata"]))
@@ -409,7 +478,8 @@ class MathRAGRetriever:
         for candidates, (start, end) in zip(batch_candidates, pair_ranges):
             for candidate, score in zip(candidates, all_rerank_scores[start:end]):
                 candidate["rerank_score"] = float(score)
-            candidates.sort(key=lambda x: x["rerank_score"], reverse=True)
+            self._apply_retrieval_scores(candidates)
+            candidates.sort(key=lambda x: x["retrieval_score"], reverse=True)
             batch_results.append([
                 self._build_retrieved_chunk(c)
                 for c in candidates[:top_k]

@@ -185,6 +185,10 @@ def result_preview(result: Any, rank: int) -> dict[str, Any]:
         "page_start": result.page_start,
         "page_end": result.page_end,
         "score": result.rerank_score,
+        "retrieval_score": getattr(result, "retrieval_score", result.rerank_score),
+        "fusion_score": getattr(result, "fusion_score", 0.0),
+        "embedding_rank": getattr(result, "embedding_rank", None),
+        "bm25_rank": getattr(result, "bm25_rank", None),
         "preview": result.content[:160] + "...",
     }
 
@@ -213,6 +217,8 @@ def evaluate_retrieval(
     top_k_embedding: int = 20,
     top_k_bm25: int = 20,
     rerank_batch_size: int = 32,
+    rrf_k: int = 60,
+    rrf_weight: float = 1.0,
     use_hybrid_search: bool = True,
     use_gpu: bool = False,
 ) -> dict[str, Any]:
@@ -238,6 +244,8 @@ def evaluate_retrieval(
         top_k_bm25=max(top_k_bm25, top_k),
         top_k_rerank=top_k,
         rerank_batch_size=rerank_batch_size,
+        rrf_k=rrf_k,
+        rrf_weight=rrf_weight,
         use_hybrid_search=use_hybrid_search,
         use_gpu=use_gpu,
     )
@@ -334,6 +342,8 @@ def evaluate_retrieval(
         "top_k_embedding": max(top_k_embedding, top_k),
         "top_k_bm25": max(top_k_bm25, top_k),
         "rerank_batch_size": rerank_batch_size,
+        "rrf_k": rrf_k,
+        "rrf_weight": rrf_weight,
         "use_hybrid_search": use_hybrid_search,
         "recall_at_1": keyword_metrics["recall_at_1"],
         "recall_at_3": keyword_metrics["recall_at_3"],
@@ -366,6 +376,7 @@ def print_report(metrics: dict[str, Any], max_failures: int = 10) -> None:
     print(f"Embedding Top-K: {metrics['top_k_embedding']}")
     print(f"BM25 Top-K: {metrics['top_k_bm25']}")
     print(f"Rerank Batch Size: {metrics['rerank_batch_size']}")
+    print(f"RRF k/weight: {metrics.get('rrf_k', 60)} / {metrics.get('rrf_weight', 1.0)}")
     print(f"Recall@1: {metrics['recall_at_1']:.2%} ({metrics['hits']['hit_at_1']}/{total})")
     print(f"Recall@3: {metrics['recall_at_3']:.2%} ({metrics['hits']['hit_at_3']}/{total})")
     print(f"Recall@5: {metrics['recall_at_5']:.2%} ({metrics['hits']['hit_at_5']}/{total})")
@@ -421,6 +432,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-k-embedding", type=int, default=20)
     parser.add_argument("--top-k-bm25", type=int, default=20)
     parser.add_argument("--rerank-batch-size", type=int, default=32)
+    parser.add_argument("--rrf-k", type=int, default=60)
+    parser.add_argument("--rrf-weight", type=float, default=1.0)
     parser.add_argument("--no-hybrid-search", action="store_true")
     parser.add_argument("--use-gpu", action="store_true")
     parser.add_argument("--output-json", default="")
@@ -440,6 +453,8 @@ def main() -> int:
             top_k_embedding=args.top_k_embedding,
             top_k_bm25=args.top_k_bm25,
             rerank_batch_size=args.rerank_batch_size,
+            rrf_k=args.rrf_k,
+            rrf_weight=args.rrf_weight,
             use_hybrid_search=not args.no_hybrid_search,
             use_gpu=args.use_gpu,
         )

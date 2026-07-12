@@ -10,6 +10,10 @@ class FakeChunk:
     embedding_score: float
     vector_id: int
     bm25_score: float = 0.0
+    fusion_score: float = 0.0
+    retrieval_score: float = 0.0
+    embedding_rank: int | None = None
+    bm25_rank: int | None = None
     title: str = ""
     parent_id: str = ""
     chapter: str = ""
@@ -32,6 +36,10 @@ class FakeRetriever:
                 rerank_score=self.rerank_score,
                 embedding_score=0.82,
                 bm25_score=3.5,
+                fusion_score=0.03,
+                retrieval_score=0.94,
+                embedding_rank=2,
+                bm25_rank=1,
                 vector_id=7,
                 title="导数的定义",
                 chapter="第二章 一元函数微分学",
@@ -71,6 +79,10 @@ def test_pipeline_preserves_retrieval_source_metadata():
             "score": 0.91,
             "embedding_score": 0.82,
             "bm25_score": 3.5,
+            "fusion_score": 0.03,
+            "retrieval_score": 0.94,
+            "embedding_rank": 2,
+            "bm25_rank": 1,
             "title": "导数的定义",
             "chapter": "第二章 一元函数微分学",
             "section": "导数",
