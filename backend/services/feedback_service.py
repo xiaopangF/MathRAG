@@ -113,5 +113,84 @@ class FeedbackService:
             )
             return int(cursor.lastrowid)
 
+    def list_feedback(
+        self,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        rating: str | None = None,
+        knowledge_base_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Return recent feedback records plus total count."""
+        self._ensure_db()
+        safe_limit = max(1, min(int(limit), 100))
+        safe_offset = max(0, int(offset))
+
+        filters = []
+        params: list[Any] = []
+        if rating:
+            filters.append("rating = ?")
+            params.append(rating)
+        if knowledge_base_id:
+            filters.append("knowledge_base_id = ?")
+            params.append(knowledge_base_id)
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM feedback {where_clause}",
+                params,
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"""
+                SELECT
+                    id,
+                    knowledge_base_id,
+                    question,
+                    answer,
+                    rating,
+                    reason,
+                    comment,
+                    top_rerank_score,
+                    contexts_json,
+                    created_at
+                FROM feedback
+                {where_clause}
+                ORDER BY id DESC
+                LIMIT ? OFFSET ?
+                """,
+                [*params, safe_limit, safe_offset],
+            ).fetchall()
+
+        items = []
+        for row in rows:
+            contexts = []
+            try:
+                contexts = json.loads(row["contexts_json"] or "[]")
+            except json.JSONDecodeError:
+                contexts = []
+            items.append(
+                {
+                    "id": row["id"],
+                    "knowledge_base_id": row["knowledge_base_id"],
+                    "question": row["question"],
+                    "answer": row["answer"],
+                    "rating": row["rating"],
+                    "reason": row["reason"],
+                    "comment": row["comment"],
+                    "top_rerank_score": row["top_rerank_score"],
+                    "contexts": contexts,
+                    "created_at": row["created_at"],
+                }
+            )
+
+        return {
+            "items": items,
+            "total": total,
+            "limit": safe_limit,
+            "offset": safe_offset,
+        }
+
 
 feedback_service = FeedbackService()
