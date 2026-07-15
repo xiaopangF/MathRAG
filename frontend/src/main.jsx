@@ -15,6 +15,10 @@ function cn(...parts) {
   return parts.filter(Boolean).join(" ");
 }
 
+function answerStrategyLabel(topK) {
+  return ["", "最快", "快速", "均衡", "充分", "深入"][topK] || "均衡";
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, options);
   const data = await response.json().catch(() => null);
@@ -77,10 +81,6 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
-  const [feedbackItems, setFeedbackItems] = useState([]);
-  const [feedbackTotal, setFeedbackTotal] = useState(0);
-  const [feedbackRating, setFeedbackRating] = useState("");
-  const [feedbackSummary, setFeedbackSummary] = useState(null);
   const pollRef = useRef(null);
 
   const activeKb = useMemo(
@@ -111,7 +111,6 @@ function App() {
 
     await refreshKnowledgeBases();
     await refreshJobs();
-    await refreshFeedback();
   }
 
   async function refreshKnowledgeBases() {
@@ -130,22 +129,6 @@ function App() {
     try {
       const items = await request("/api/jobs?limit=20");
       setJobs(items);
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function refreshFeedback(rating = feedbackRating) {
-    try {
-      const params = new URLSearchParams({ limit: "10" });
-      if (rating) params.set("rating", rating);
-      const [result, summary] = await Promise.all([
-        request(`/api/feedback?${params.toString()}`),
-        request("/api/feedback/summary"),
-      ]);
-      setFeedbackItems(result.items || []);
-      setFeedbackTotal(result.total || 0);
-      setFeedbackSummary(summary);
     } catch (err) {
       setError(err.message);
     }
@@ -318,7 +301,6 @@ function App() {
       setMessages((items) =>
         items.map((item) => (item === message ? { ...item, feedback: rating } : item)),
       );
-      await refreshFeedback();
     } catch (err) {
       setError(err.message);
     }
@@ -328,18 +310,6 @@ function App() {
     setMessages((items) =>
       items.map((item) => (item === message ? { ...item, feedbackComment: value } : item)),
     );
-  }
-
-  function formatFeedbackTime(value) {
-    if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString();
-  }
-
-  function formatPercent(value) {
-    if (value == null || Number.isNaN(Number(value))) return "-";
-    return `${Math.round(Number(value) * 100)}%`;
   }
 
   return (
@@ -499,65 +469,6 @@ function App() {
             ))}
           </div>
         </section>
-        <section className="panel">
-          <div className="panelHead">
-            <h2>用户反馈</h2>
-            <button type="button" className="iconButton" onClick={() => refreshFeedback()} title="刷新用户反馈">
-              ↻
-            </button>
-          </div>
-          <div className="feedbackToolbar">
-            <select
-              value={feedbackRating}
-              onChange={(event) => {
-                const value = event.target.value;
-                setFeedbackRating(value);
-                refreshFeedback(value);
-              }}
-            >
-              <option value="">全部反馈</option>
-              <option value="up">有用</option>
-              <option value="down">不准</option>
-            </select>
-            <span>{feedbackTotal} 条</span>
-          </div>
-          <div className="feedbackStats">
-            <div>
-              <strong>{feedbackSummary?.total ?? 0}</strong>
-              <span>总反馈</span>
-            </div>
-            <div>
-              <strong>{feedbackSummary?.up_count ?? 0}</strong>
-              <span>有用</span>
-            </div>
-            <div>
-              <strong>{feedbackSummary?.down_count ?? 0}</strong>
-              <span>不准</span>
-            </div>
-            <div>
-              <strong>{formatPercent(feedbackSummary?.positive_rate)}</strong>
-              <span>正反馈率</span>
-            </div>
-          </div>
-          <div className="feedbackList">
-            {feedbackItems.length === 0 && <p className="muted">暂无用户反馈</p>}
-            {feedbackItems.map((item) => (
-              <details className="feedbackItem" key={item.id}>
-                <summary>
-                  <span className={cn("pill", item.rating === "up" ? "good" : "bad")}>
-                    {item.rating === "up" ? "有用" : "不准"}
-                  </span>
-                  <strong>{item.question}</strong>
-                </summary>
-                <p>{item.comment || "未填写文字反馈"}</p>
-                <small>{formatFeedbackTime(item.created_at)} · {item.knowledge_base_id}</small>
-                {item.top_rerank_score != null && (
-                  <small>置信度：{Number(item.top_rerank_score).toFixed(3)}</small>
-                )}
-              </details>
-            ))}
-          </div>
-        </section>
       </aside>
 
       <section className="workspace">
@@ -566,15 +477,27 @@ function App() {
             <h2>💬 智能问答</h2>
             <p>📖 {selectedKb === "default" ? "默认知识库" : selectedKb}</p>
           </div>
-          <label className="topK">
-            🔍 Top K
+          <label className="answerStrategy" htmlFor="answer-strategy">
+            <span className="strategyHeader">
+              <span>回答策略</span>
+              <strong>{answerStrategyLabel(topK)}</strong>
+            </span>
             <input
-              type="number"
+              id="answer-strategy"
+              className="strategyRange"
+              type="range"
               min="1"
-              max="10"
+              max="5"
+              step="1"
               value={topK}
               onChange={(event) => setTopK(Number(event.target.value))}
+              aria-label="回答策略"
+              aria-valuetext={answerStrategyLabel(topK)}
             />
+            <span className="strategyLabels" aria-hidden="true">
+              <span>更快</span>
+              <span>参考更充分</span>
+            </span>
           </label>
         </header>
 
