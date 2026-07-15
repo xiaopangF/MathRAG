@@ -331,6 +331,23 @@ def test_feedback_service_lists_recent_feedback_with_filters(tmp_path):
     assert filtered["items"][0]["comment"] == "缺少条件"
 
 
+    summary = service.summarize_feedback()
+
+    assert summary["total"] == 2
+    assert summary["up_count"] == 1
+    assert summary["down_count"] == 1
+    assert summary["commented_count"] == 2
+    assert summary["positive_rate"] == 0.5
+    assert summary["average_top_rerank_score"] == pytest.approx(0.67)
+    assert summary["latest_created_at"] is not None
+
+    kb_summary = service.summarize_feedback(knowledge_base_id="default")
+
+    assert kb_summary["total"] == 1
+    assert kb_summary["up_count"] == 1
+    assert kb_summary["down_count"] == 0
+
+
 def test_backend_database_uses_wal_mode(tmp_path, monkeypatch):
     service = make_service(tmp_path, monkeypatch)
     service.ensure_db()

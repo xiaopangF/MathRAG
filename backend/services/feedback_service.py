@@ -192,5 +192,49 @@ class FeedbackService:
             "offset": safe_offset,
         }
 
+    def summarize_feedback(
+        self,
+        *,
+        knowledge_base_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Return aggregate feedback counts for the dashboard."""
+        self._ensure_db()
+        filters = []
+        params: list[Any] = []
+        if knowledge_base_id:
+            filters.append("knowledge_base_id = ?")
+            params.append(knowledge_base_id)
+        where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            summary = conn.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN rating = 'up' THEN 1 ELSE 0 END) AS up_count,
+                    SUM(CASE WHEN rating = 'down' THEN 1 ELSE 0 END) AS down_count,
+                    SUM(CASE WHEN TRIM(comment) != '' THEN 1 ELSE 0 END) AS commented_count,
+                    AVG(top_rerank_score) AS average_top_rerank_score,
+                    MAX(created_at) AS latest_created_at
+                FROM feedback
+                {where_clause}
+                """,
+                params,
+            ).fetchone()
+
+        total = int(summary["total"] or 0)
+        up_count = int(summary["up_count"] or 0)
+        down_count = int(summary["down_count"] or 0)
+        return {
+            "total": total,
+            "up_count": up_count,
+            "down_count": down_count,
+            "commented_count": int(summary["commented_count"] or 0),
+            "average_top_rerank_score": summary["average_top_rerank_score"],
+            "latest_created_at": summary["latest_created_at"],
+            "positive_rate": up_count / total if total else 0.0,
+        }
+
 
 feedback_service = FeedbackService()

@@ -277,6 +277,7 @@ PDF 上传
 | `GET` | `/api/knowledge-bases` | 知识库列表 |
 | `DELETE` | `/api/knowledge-bases/{knowledge_base_id}` | 删除知识库和索引 |
 | `GET` | `/api/eval/latest` | 获取最近评测结果 |
+| `GET` | `/api/feedback/summary` | 查看用户反馈统计 |
 | `GET` | `/api/feedback` | 分页查看用户反馈 |
 | `POST` | `/api/feedback` | 保存回答反馈 |
 | `GET` | `/api/settings` | 查询运行设置状态 |

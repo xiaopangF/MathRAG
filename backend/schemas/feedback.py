@@ -62,3 +62,13 @@ class FeedbackListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class FeedbackSummaryResponse(BaseModel):
+    total: int
+    up_count: int
+    down_count: int
+    commented_count: int
+    average_top_rerank_score: float | None = None
+    latest_created_at: str | None = None
+    positive_rate: float
