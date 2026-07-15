@@ -1,0 +1,128 @@
+{
+  "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+  "index_dir": "data\\faiss_index",
+  "variants": [
+    {
+      "name": "full",
+      "description": "Embedding + BM25 + RRF + Reranker",
+      "config": {
+        "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+        "index_dir": "data\\faiss_index",
+        "top_k": 5,
+        "top_k_embedding": 20,
+        "top_k_bm25": 20,
+        "rerank_batch_size": 64,
+        "rrf_k": 60,
+        "rrf_weight": 1.0,
+        "use_hybrid_search": true,
+        "use_reranker": true,
+        "use_query_rewrite": true,
+        "use_gpu": false
+      },
+      "metrics": {
+        "keyword": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.8842105263157894,
+          "recall_at_3": 0.9894736842105263,
+          "recall_at_5": 1.0,
+          "mrr": 0.937719298245614,
+          "hits": {
+            "hit_at_1": 84,
+            "hit_at_3": 94,
+            "hit_at_5": 95
+          }
+        },
+        "page": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.5578947368421052,
+          "recall_at_3": 0.8210526315789474,
+          "recall_at_5": 0.9368421052631579,
+          "mrr": 0.6971929824561404,
+          "hits": {
+            "hit_at_1": 53,
+            "hit_at_3": 78,
+            "hit_at_5": 89
+          }
+        },
+        "section": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.6421052631578947,
+          "recall_at_3": 0.8105263157894737,
+          "recall_at_5": 0.8210526315789474,
+          "mrr": 0.718421052631579,
+          "hits": {
+            "hit_at_1": 61,
+            "hit_at_3": 77,
+            "hit_at_5": 78
+          }
+        },
+        "failed_counts": {
+          "keyword": 0,
+          "page": 6,
+          "section": 17
+        }
+      }
+    },
+    {
+      "name": "no_query_rewrite",
+      "description": "Full pipeline without query rewrite expansion",
+      "config": {
+        "eval_path": "data\\eval\\questions.grounded.dev.jsonl",
+        "index_dir": "data\\faiss_index",
+        "top_k": 5,
+        "top_k_embedding": 20,
+        "top_k_bm25": 20,
+        "rerank_batch_size": 64,
+        "rrf_k": 60,
+        "rrf_weight": 1.0,
+        "use_hybrid_search": true,
+        "use_reranker": true,
+        "use_query_rewrite": false,
+        "use_gpu": false
+      },
+      "metrics": {
+        "keyword": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.8947368421052632,
+          "recall_at_3": 0.9894736842105263,
+          "recall_at_5": 1.0,
+          "mrr": 0.9412280701754386,
+          "hits": {
+            "hit_at_1": 85,
+            "hit_at_3": 94,
+            "hit_at_5": 95
+          }
+        },
+        "page": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.5578947368421052,
+          "recall_at_3": 0.8210526315789474,
+          "recall_at_5": 0.9157894736842105,
+          "mrr": 0.6907017543859648,
+          "hits": {
+            "hit_at_1": 53,
+            "hit_at_3": 78,
+            "hit_at_5": 87
+          }
+        },
+        "section": {
+          "evaluated_count": 95,
+          "recall_at_1": 0.6526315789473685,
+          "recall_at_3": 0.8105263157894737,
+          "recall_at_5": 0.8210526315789474,
+          "mrr": 0.7214035087719298,
+          "hits": {
+            "hit_at_1": 62,
+            "hit_at_3": 77,
+            "hit_at_5": 78
+          }
+        },
+        "failed_counts": {
+          "keyword": 0,
+          "page": 8,
+          "section": 17
+        }
+      }
+    }
+  ]
+}

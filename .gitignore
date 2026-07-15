@@ -40,6 +40,7 @@ reports/*
 !reports/retrieval_metrics_grounded_dev.json
 !reports/retrieval_metrics_grounded_sample.json
 !reports/retrieval_ablation_grounded_dev.json
+!reports/retrieval_ablation_query_rewrite.json
 
 # model / index artifacts
 *.faiss

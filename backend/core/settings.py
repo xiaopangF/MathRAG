@@ -90,6 +90,7 @@ class BackendSettings:
     job_max_attempts: int
     rag_max_concurrency: int
     rag_acquire_timeout_seconds: float
+    rag_query_rewrite_enabled: bool
     llm_timeout_seconds: float
     llm_max_retries: int
     request_id_header: str = "X-Request-ID"
@@ -188,6 +189,10 @@ class BackendSettings:
                 2.0,
                 minimum=0.0,
                 maximum=60.0,
+            ),
+            rag_query_rewrite_enabled=_read_bool(
+                "MATHRAG_QUERY_REWRITE_ENABLED",
+                True,
             ),
             llm_timeout_seconds=_read_float(
                 "MATHRAG_LLM_TIMEOUT_SECONDS",

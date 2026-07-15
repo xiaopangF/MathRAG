@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.loader.math_text import build_math_search_text
+from src.retriever.query_rewriter import rewrite_query_for_retrieval
 
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+|[\u4e00-\u9fff]")
@@ -92,8 +93,19 @@ class BM25Retriever:
             score += self._idf(term) * numerator / denominator
         return score
 
-    def retrieve(self, query: str, top_k: int = 20) -> list[BM25Result]:
-        query_tokens = tokenize(build_math_search_text(query))
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 20,
+        *,
+        rewrite_query: bool = True,
+    ) -> list[BM25Result]:
+        query_text = (
+            rewrite_query_for_retrieval(query)
+            if rewrite_query
+            else build_math_search_text(query)
+        )
+        query_tokens = tokenize(query_text)
         if not query_tokens:
             return []
 

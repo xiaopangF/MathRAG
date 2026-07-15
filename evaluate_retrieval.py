@@ -221,6 +221,7 @@ def evaluate_retrieval(
     rrf_weight: float = 1.0,
     use_hybrid_search: bool = True,
     use_reranker: bool = True,
+    use_query_rewrite: bool = True,
     use_gpu: bool = False,
 ) -> dict[str, Any]:
     """Run retrieval evaluation and return metrics plus failed cases."""
@@ -249,6 +250,7 @@ def evaluate_retrieval(
         rrf_weight=rrf_weight,
         use_hybrid_search=use_hybrid_search,
         use_reranker=use_reranker,
+        use_query_rewrite=use_query_rewrite,
         use_gpu=use_gpu,
     )
     retriever = MathRAGRetriever(config)
@@ -348,6 +350,7 @@ def evaluate_retrieval(
         "rrf_weight": rrf_weight,
         "use_hybrid_search": use_hybrid_search,
         "use_reranker": use_reranker,
+        "use_query_rewrite": use_query_rewrite,
         "recall_at_1": keyword_metrics["recall_at_1"],
         "recall_at_3": keyword_metrics["recall_at_3"],
         "recall_at_5": keyword_metrics["recall_at_5"],
@@ -377,6 +380,7 @@ def print_report(metrics: dict[str, Any], max_failures: int = 10) -> None:
     print(f"跳过问题数: {metrics['skipped_count']}")
     print(f"混合检索: {'开启' if metrics['use_hybrid_search'] else '关闭'}")
     print(f"Reranker: {'开启' if metrics.get('use_reranker', True) else '关闭'}")
+    print(f"Query Rewrite: {'开启' if metrics.get('use_query_rewrite', True) else '关闭'}")
     print(f"Embedding Top-K: {metrics['top_k_embedding']}")
     print(f"BM25 Top-K: {metrics['top_k_bm25']}")
     print(f"Rerank Batch Size: {metrics['rerank_batch_size']}")
@@ -440,6 +444,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rrf-weight", type=float, default=1.0)
     parser.add_argument("--no-hybrid-search", action="store_true")
     parser.add_argument("--no-reranker", action="store_true")
+    parser.add_argument("--no-query-rewrite", action="store_true")
     parser.add_argument("--use-gpu", action="store_true")
     parser.add_argument("--output-json", default="")
     parser.add_argument("--max-failures", type=int, default=10)
@@ -462,6 +467,7 @@ def main() -> int:
             rrf_weight=args.rrf_weight,
             use_hybrid_search=not args.no_hybrid_search,
             use_reranker=not args.no_reranker,
+            use_query_rewrite=not args.no_query_rewrite,
             use_gpu=args.use_gpu,
         )
     except (FileNotFoundError, ValueError, ImportError, RuntimeError, OSError) as exc:

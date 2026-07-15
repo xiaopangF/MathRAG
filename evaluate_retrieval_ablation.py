@@ -44,6 +44,10 @@ DEFAULT_VARIANTS: dict[str, dict[str, Any]] = {
         "description": "Embedding + BM25 + RRF, without second-stage reranker",
         "use_reranker": False,
     },
+    "no_query_rewrite": {
+        "description": "Full pipeline without query rewrite expansion",
+        "use_query_rewrite": False,
+    },
     "narrow_recall": {
         "description": "Full pipeline with first-stage candidate depth reduced to 5 + 5",
         "top_k_embedding": 5,
@@ -108,7 +112,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--use-gpu", action="store_true")
     parser.add_argument(
         "--variants",
-        default="full,no_rrf,no_bm25,no_reranker,narrow_recall",
+        default="full,no_rrf,no_bm25,no_reranker,no_query_rewrite,narrow_recall",
         help="Comma-separated variant names. Available: "
         + ", ".join(DEFAULT_VARIANTS),
     )
@@ -139,6 +143,7 @@ def main() -> int:
         "rrf_weight": args.rrf_weight,
         "use_hybrid_search": True,
         "use_reranker": True,
+        "use_query_rewrite": True,
         "use_gpu": args.use_gpu,
     }
 
