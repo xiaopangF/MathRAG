@@ -80,6 +80,7 @@ function App() {
   const [feedbackItems, setFeedbackItems] = useState([]);
   const [feedbackTotal, setFeedbackTotal] = useState(0);
   const [feedbackRating, setFeedbackRating] = useState("");
+  const [feedbackSummary, setFeedbackSummary] = useState(null);
   const pollRef = useRef(null);
 
   const activeKb = useMemo(
@@ -138,9 +139,13 @@ function App() {
     try {
       const params = new URLSearchParams({ limit: "10" });
       if (rating) params.set("rating", rating);
-      const result = await request(`/api/feedback?${params.toString()}`);
+      const [result, summary] = await Promise.all([
+        request(`/api/feedback?${params.toString()}`),
+        request("/api/feedback/summary"),
+      ]);
       setFeedbackItems(result.items || []);
       setFeedbackTotal(result.total || 0);
+      setFeedbackSummary(summary);
     } catch (err) {
       setError(err.message);
     }
@@ -332,6 +337,11 @@ function App() {
     return date.toLocaleString();
   }
 
+  function formatPercent(value) {
+    if (value == null || Number.isNaN(Number(value))) return "-";
+    return `${Math.round(Number(value) * 100)}%`;
+  }
+
   return (
     <main className="shell">
       <aside className="sidebar">
@@ -510,6 +520,24 @@ function App() {
               <option value="down">不准</option>
             </select>
             <span>{feedbackTotal} 条</span>
+          </div>
+          <div className="feedbackStats">
+            <div>
+              <strong>{feedbackSummary?.total ?? 0}</strong>
+              <span>总反馈</span>
+            </div>
+            <div>
+              <strong>{feedbackSummary?.up_count ?? 0}</strong>
+              <span>有用</span>
+            </div>
+            <div>
+              <strong>{feedbackSummary?.down_count ?? 0}</strong>
+              <span>不准</span>
+            </div>
+            <div>
+              <strong>{formatPercent(feedbackSummary?.positive_rate)}</strong>
+              <span>正反馈率</span>
+            </div>
           </div>
           <div className="feedbackList">
             {feedbackItems.length === 0 && <p className="muted">暂无用户反馈</p>}
