@@ -55,7 +55,8 @@ class RAGService:
                     from src.retriever.retriever import RAGConfig
 
                     config = RAGConfig(
-                        faiss_index_dir=str(PROJECT_ROOT / "data" / "faiss_index")
+                        faiss_index_dir=str(PROJECT_ROOT / "data" / "faiss_index"),
+                        use_query_rewrite=runtime_settings.rag_query_rewrite_enabled,
                     )
                     self._pipeline = MathRAGPipeline(retriever_config=config)
                     logger.info(
@@ -127,7 +128,10 @@ class RAGService:
             started_at = time.perf_counter()
             from src.retriever.retriever import MathRAGRetriever, RAGConfig
 
-            config = RAGConfig(faiss_index_dir=kb["index_dir"])
+            config = RAGConfig(
+                faiss_index_dir=kb["index_dir"],
+                use_query_rewrite=runtime_settings.rag_query_rewrite_enabled,
+            )
             retriever = MathRAGRetriever(config)
             self._retrievers[knowledge_base_id] = retriever
             logger.info(

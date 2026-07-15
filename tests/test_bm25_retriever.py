@@ -49,3 +49,16 @@ def test_bm25_uses_math_aliases_without_changing_display_text():
 
     assert results[0].vector_id == 0
     assert results[0].metadata["text"] == display_text
+
+
+def test_bm25_query_rewrite_expands_student_aliases():
+    metadata = {
+        0: {
+            "title": "洛必达法则",
+            "text": "洛必达法则用于处理 0/0 或 ∞/∞ 型未定式极限。",
+        }
+    }
+    retriever = BM25Retriever(metadata)
+
+    assert retriever.retrieve("lhospital conditions", top_k=1)[0].vector_id == 0
+    assert retriever.retrieve("lhospital conditions", top_k=1, rewrite_query=False) == []

@@ -39,12 +39,23 @@ class StaticIndex:
 class StaticBM25:
     def __init__(self, metadata):
         self.metadata = metadata
+        self.calls = []
 
-    def retrieve(self, query, top_k=20):
+    def retrieve(self, query, top_k=20, **kwargs):
+        self.calls.append((query, top_k, kwargs))
         return [
             BM25Result(vector_id=2, score=10.0, metadata=self.metadata[2]),
             BM25Result(vector_id=3, score=8.0, metadata=self.metadata[3]),
         ][:top_k]
+
+
+class RecordingEmptyBM25:
+    def __init__(self):
+        self.calls = []
+
+    def retrieve(self, query, top_k=20, **kwargs):
+        self.calls.append((query, top_k, kwargs))
+        return []
 
 
 def test_build_ranking_text_includes_title_without_mutating_content():
@@ -99,6 +110,59 @@ def test_batch_retrieve_normalizes_math_queries_before_embedding():
     assert "^(2)" in retriever.embed_model.sentences[0]
 
 
+def test_batch_retrieve_can_disable_query_rewrite():
+    retriever = MathRAGRetriever.__new__(MathRAGRetriever)
+    retriever.config = SimpleNamespace(
+        top_k_rerank=1,
+        top_k_embedding=1,
+        top_k_bm25=1,
+        rerank_batch_size=1,
+        use_query_rewrite=False,
+    )
+    retriever.embed_model = RecordingEmbedder()
+    retriever.index = EmptyIndex()
+    retriever.metadata_by_vector_id = {}
+    bm25 = RecordingEmptyBM25()
+    retriever.bm25_retriever = bm25
+    retriever.reranker = SimpleNamespace(predict=lambda *args, **kwargs: [])
+
+    results = retriever.batch_retrieve(["洛必达法则什么时候能用？"], top_k=1)
+
+    assert results == [[]]
+    assert "洛必达法则什么时候能用？" in retriever.embed_model.sentences[0]
+    assert "未定式" not in retriever.embed_model.sentences[0]
+    assert "适用条件" not in retriever.embed_model.sentences[0]
+    assert bm25.calls == [
+        ("洛必达法则什么时候能用？", 1, {"rewrite_query": False})
+    ]
+
+
+def test_batch_retrieve_keeps_embedding_query_focused_when_rewrite_is_enabled():
+    retriever = MathRAGRetriever.__new__(MathRAGRetriever)
+    retriever.config = SimpleNamespace(
+        top_k_rerank=1,
+        top_k_embedding=1,
+        top_k_bm25=1,
+        rerank_batch_size=1,
+    )
+    retriever.embed_model = RecordingEmbedder()
+    retriever.index = EmptyIndex()
+    retriever.metadata_by_vector_id = {}
+    bm25 = RecordingEmptyBM25()
+    retriever.bm25_retriever = bm25
+    retriever.reranker = SimpleNamespace(predict=lambda *args, **kwargs: [])
+
+    results = retriever.batch_retrieve(["洛必达法则什么时候能用？"], top_k=1)
+
+    assert results == [[]]
+    assert "洛必达法则什么时候能用？" in retriever.embed_model.sentences[0]
+    assert "未定式" not in retriever.embed_model.sentences[0]
+    assert "适用条件" not in retriever.embed_model.sentences[0]
+    assert bm25.calls == [
+        ("洛必达法则什么时候能用？", 1, {"rewrite_query": True})
+    ]
+
+
 def test_retrieve_uses_rrf_fusion_as_rerank_prior():
     metadata = {
         1: {"text": "只被向量召回的内容", "title": "向量候选"},
@@ -120,7 +184,8 @@ def test_retrieve_uses_rrf_fusion_as_rerank_prior():
     retriever.embed_model = RecordingEmbedder()
     retriever.index = StaticIndex()
     retriever.metadata_by_vector_id = metadata
-    retriever.bm25_retriever = StaticBM25(metadata)
+    bm25 = StaticBM25(metadata)
+    retriever.bm25_retriever = bm25
     retriever.reranker = SimpleNamespace(
         predict=lambda pairs, **kwargs: [0.0] * len(pairs)
     )
@@ -133,6 +198,7 @@ def test_retrieve_uses_rrf_fusion_as_rerank_prior():
     assert results[0].bm25_rank == 1
     assert results[0].fusion_score > results[1].fusion_score
     assert results[0].retrieval_score == results[0].fusion_score
+    assert bm25.calls == [("融合查询", 2, {"rewrite_query": True})]
 
 
 def test_retrieve_can_disable_reranker_and_rank_by_fusion():

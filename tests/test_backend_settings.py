@@ -14,6 +14,7 @@ def test_backend_settings_load_operational_values(monkeypatch):
     monkeypatch.setenv("MATHRAG_PDF_TABLE_DETECTION_ENABLED", "true")
     monkeypatch.setenv("MATHRAG_JOB_MAX_ATTEMPTS", "5")
     monkeypatch.setenv("MATHRAG_RAG_MAX_CONCURRENCY", "3")
+    monkeypatch.setenv("MATHRAG_QUERY_REWRITE_ENABLED", "false")
     monkeypatch.setenv("MATHRAG_LLM_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("MATHRAG_LLM_MAX_RETRIES", "4")
     monkeypatch.setenv("MATHRAG_LOG_JSON", "false")
@@ -36,6 +37,7 @@ def test_backend_settings_load_operational_values(monkeypatch):
     assert settings.pdf_table_detection_enabled is True
     assert settings.job_max_attempts == 5
     assert settings.rag_max_concurrency == 3
+    assert settings.rag_query_rewrite_enabled is False
     assert settings.llm_timeout_seconds == 45
     assert settings.llm_max_retries == 4
     assert settings.log_json is False
@@ -57,6 +59,7 @@ def test_backend_settings_load_operational_values(monkeypatch):
         ("MATHRAG_SQLITE_TIMEOUT_SECONDS", "invalid"),
         ("MATHRAG_JOB_MAX_ATTEMPTS", "100"),
         ("MATHRAG_LOG_JSON", "sometimes"),
+        ("MATHRAG_QUERY_REWRITE_ENABLED", "sometimes"),
         ("MATHRAG_LLM_TIMEOUT_SECONDS", "0"),
         ("MATHRAG_LLM_MAX_RETRIES", "11"),
     ],

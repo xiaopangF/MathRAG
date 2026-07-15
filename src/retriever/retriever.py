@@ -66,6 +66,7 @@ class RAGConfig:
     rerank_batch_size: int = 32
     use_hybrid_search: bool = True
     use_reranker: bool = True
+    use_query_rewrite: bool = True
     rrf_k: int = 60
     rrf_weight: float = 1.0
     use_gpu: bool = False  # 设为 True 时会尝试使用 GPU
@@ -221,16 +222,21 @@ class MathRAGRetriever:
 
     def _encode_query(self, query: str) -> np.ndarray:
         """编码查询并强制转为 float32"""
-        search_query = build_math_search_text(query)
+        search_query = self._build_query_search_text(query)
         emb = self.embed_model.encode([search_query], normalize_embeddings=True)
         return np.asarray(emb, dtype=np.float32)
+
+    def _build_query_search_text(self, query: str) -> str:
+        """Build semantic query text for embedding search."""
+        return build_math_search_text(query)
 
     def _get_cache_key(self, query: str, top_k: int) -> str:
         return (
             f"{query.strip().lower()}_{top_k}_"
             f"emb{self.config.top_k_embedding}_bm25{self.config.top_k_bm25}_"
             f"rrf{self.config.rrf_k}_{self.config.rrf_weight}_"
-            f"reranker{getattr(self.config, 'use_reranker', True)}"
+            f"reranker{getattr(self.config, 'use_reranker', True)}_"
+            f"rewrite{getattr(self.config, 'use_query_rewrite', True)}"
         )
 
     def _is_cache_valid(self, key: str) -> bool:
@@ -370,7 +376,11 @@ class MathRAGRetriever:
                 self._merge_candidate(candidates_by_id, candidate)
 
         if self.bm25_retriever is not None:
-            bm25_results = self.bm25_retriever.retrieve(query, top_k=self.config.top_k_bm25)
+            bm25_results = self.bm25_retriever.retrieve(
+                query,
+                top_k=self.config.top_k_bm25,
+                rewrite_query=getattr(self.config, "use_query_rewrite", True),
+            )
             for rank, item in enumerate(bm25_results, start=1):
                 candidate = self._candidate_from_meta(
                     item.vector_id,
@@ -428,7 +438,7 @@ class MathRAGRetriever:
         if top_k is None:
             top_k = self.config.top_k_rerank
 
-        search_queries = [build_math_search_text(query) for query in queries]
+        search_queries = [self._build_query_search_text(query) for query in queries]
         query_embs = self.embed_model.encode(
             search_queries,
             normalize_embeddings=True,
@@ -457,7 +467,11 @@ class MathRAGRetriever:
                     self._merge_candidate(candidates_by_id, candidate)
 
             if self.bm25_retriever is not None:
-                bm25_results = self.bm25_retriever.retrieve(q, top_k=self.config.top_k_bm25)
+                bm25_results = self.bm25_retriever.retrieve(
+                    q,
+                    top_k=self.config.top_k_bm25,
+                    rewrite_query=getattr(self.config, "use_query_rewrite", True),
+                )
                 for rank, item in enumerate(bm25_results, start=1):
                     candidate = self._candidate_from_meta(
                         item.vector_id,
