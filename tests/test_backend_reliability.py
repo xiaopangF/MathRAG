@@ -293,6 +293,44 @@ def test_feedback_database_uses_wal_mode(tmp_path):
     assert schema_version == FEEDBACK_SCHEMA_VERSION
 
 
+def test_feedback_service_lists_recent_feedback_with_filters(tmp_path):
+    service = FeedbackService(tmp_path / "feedback" / "mathrag.db")
+    first_id = service.save(
+        {
+            "knowledge_base_id": "default",
+            "question": "什么是导数？",
+            "answer": "导数刻画变化率。",
+            "rating": "up",
+            "comment": "回答清楚",
+            "contexts": [{"title": "导数"}],
+            "top_rerank_score": 0.91,
+        }
+    )
+    second_id = service.save(
+        {
+            "knowledge_base_id": "kb_123456789abc",
+            "question": "什么是泰勒公式？",
+            "answer": "泰勒公式用于局部近似。",
+            "rating": "down",
+            "comment": "缺少条件",
+            "contexts": [{"title": "泰勒公式"}],
+            "top_rerank_score": 0.43,
+        }
+    )
+
+    result = service.list_feedback(limit=10)
+
+    assert result["total"] == 2
+    assert [item["id"] for item in result["items"]] == [second_id, first_id]
+    assert result["items"][0]["contexts"] == [{"title": "泰勒公式"}]
+
+    filtered = service.list_feedback(rating="down", knowledge_base_id="kb_123456789abc")
+
+    assert filtered["total"] == 1
+    assert filtered["items"][0]["id"] == second_id
+    assert filtered["items"][0]["comment"] == "缺少条件"
+
+
 def test_backend_database_uses_wal_mode(tmp_path, monkeypatch):
     service = make_service(tmp_path, monkeypatch)
     service.ensure_db()

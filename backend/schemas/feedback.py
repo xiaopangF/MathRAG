@@ -42,3 +42,23 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     id: int
     status: str = "saved"
+
+
+class FeedbackItem(BaseModel):
+    id: int
+    knowledge_base_id: str
+    question: str
+    answer: str
+    rating: Literal["up", "down"]
+    reason: str = ""
+    comment: str = ""
+    top_rerank_score: float | None = None
+    contexts: list[dict[str, Any]] = Field(default_factory=list)
+    created_at: str
+
+
+class FeedbackListResponse(BaseModel):
+    items: list[FeedbackItem]
+    total: int
+    limit: int
+    offset: int
