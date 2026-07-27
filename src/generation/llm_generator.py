@@ -45,6 +45,8 @@ class LLMGenerator:
         *,
         timeout_seconds: float | None = None,
         max_retries: int | None = None,
+        model: str | None = None,
+        thinking_enabled: bool | None = None,
     ):
         try:
             from dotenv import load_dotenv
@@ -61,6 +63,16 @@ class LLMGenerator:
         )
         self.timeout_seconds = self._resolve_timeout(timeout_seconds)
         self.max_retries = self._resolve_max_retries(max_retries)
+        self.model = (
+            model or os.getenv("MATHRAG_LLM_MODEL", "deepseek-v4-flash")
+        ).strip()
+        if not self.model or len(self.model) > 128:
+            raise ValueError("MATHRAG_LLM_MODEL 配置无效")
+        self.thinking_enabled = (
+            self._resolve_thinking_enabled()
+            if thinking_enabled is None
+            else bool(thinking_enabled)
+        )
 
         if not self.api_key:
             raise ValueError(
@@ -111,6 +123,15 @@ class LLMGenerator:
         if not 0 <= value <= 10:
             raise ValueError("LLM max_retries 必须在 0 到 10 之间")
         return value
+
+    @staticmethod
+    def _resolve_thinking_enabled() -> bool:
+        raw = os.getenv("MATHRAG_LLM_THINKING_ENABLED", "false").strip().lower()
+        if raw in {"1", "true", "yes", "on"}:
+            return True
+        if raw in {"0", "false", "no", "off"}:
+            return False
+        raise ValueError("MATHRAG_LLM_THINKING_ENABLED 必须是布尔值")
 
     @staticmethod
     def _format_page_range(page_start: Any, page_end: Any) -> str:
@@ -209,6 +230,71 @@ class LLMGenerator:
             "page_end": None,
         }
 
+    def complete_chat(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice: Any | None = None,
+        temperature: float = 0.3,
+        max_tokens: int = 2048,
+    ):
+        request: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+            "extra_body": {
+                "thinking": {
+                    "type": "enabled" if self.thinking_enabled else "disabled"
+                }
+            },
+        }
+        if tools is not None:
+            request["tools"] = tools
+        if tool_choice is not None:
+            request["tool_choice"] = tool_choice
+
+        try:
+            response = self.client.chat.completions.create(**request)
+            choice = response.choices[0]
+            if choice.finish_reason in {
+                "length",
+                "content_filter",
+                "insufficient_system_resource",
+            }:
+                raise LLMGenerationError(
+                    f"DeepSeek 未能完整生成回答（{choice.finish_reason}），请稍后重试。"
+                )
+            return choice.message
+        except AuthenticationError as e:
+            raise LLMAuthenticationError(
+                "DeepSeek API Key 无效或已失效，请重新复制控制台里的有效 Key。"
+            ) from e
+        except PermissionDeniedError as e:
+            raise LLMGenerationError(
+                "DeepSeek 请求被拒绝，请检查账号权限、模型权限或 API Key 使用范围。"
+            ) from e
+        except RateLimitError as e:
+            raise LLMRateLimitError(
+                "DeepSeek 请求过于频繁，已触发限流，请稍后再试。"
+            ) from e
+        except (APITimeoutError, APIConnectionError) as e:
+            raise LLMConnectionError(
+                "无法连接 DeepSeek 服务，请检查网络、代理或 DEEPSEEK_BASE_URL。"
+            ) from e
+        except BadRequestError as e:
+            raise LLMGenerationError(
+                "DeepSeek 请求参数不正确，请检查模型名称、工具参数、上下文长度或 base URL。"
+            ) from e
+        except APIStatusError as e:
+            self._raise_for_status_error(e)
+        except LLMGenerationError:
+            raise
+        except Exception as e:
+            raise LLMGenerationError(f"生成答案时出错：{str(e)}") from e
+
     def generate(self, query: str, contexts: list[Any]) -> str:
         """
         基于检索到的上下文生成答案
@@ -254,45 +340,18 @@ class LLMGenerator:
 
 请根据以上教材内容，回答学生的问题。"""
 
-        try:
-            response = self.client.chat.completions.create(
-                model="deepseek-chat",
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                temperature=0.3,
-                max_tokens=2048,
-                stream=False
-            )
-            content = response.choices[0].message.content
-            if not content:
-                raise LLMGenerationError("DeepSeek 返回了空答案，请稍后重试。")
-            return content
-        except AuthenticationError as e:
-            raise LLMAuthenticationError(
-                "DeepSeek API Key 无效或已失效，请重新复制控制台里的有效 Key。"
-            ) from e
-        except PermissionDeniedError as e:
-            raise LLMGenerationError(
-                "DeepSeek 请求被拒绝，请检查账号权限、模型权限或 API Key 使用范围。"
-            ) from e
-        except RateLimitError as e:
-            raise LLMRateLimitError(
-                "DeepSeek 请求过于频繁，已触发限流，请稍后再试。"
-            ) from e
-        except (APITimeoutError, APIConnectionError) as e:
-            raise LLMConnectionError(
-                "无法连接 DeepSeek 服务，请检查网络、代理或 DEEPSEEK_BASE_URL。"
-            ) from e
-        except BadRequestError as e:
-            raise LLMGenerationError(
-                "DeepSeek 请求参数不正确，请检查模型名称、上下文长度或 base URL。"
-            ) from e
-        except APIStatusError as e:
-            self._raise_for_status_error(e)
-        except Exception as e:
-            raise LLMGenerationError(f"生成答案时出错：{str(e)}") from e
+        message = self.complete_chat(
+            messages=[
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.3,
+            max_tokens=2048,
+        )
+        content = message.content
+        if not content:
+            raise LLMGenerationError("DeepSeek 返回了空答案，请稍后重试。")
+        return content
 
 
 # ---------- 测试 ----------

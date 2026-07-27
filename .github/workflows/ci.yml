@@ -127,6 +127,9 @@ jobs:
       - name: Build and start application
         run: docker compose up -d --build --wait --wait-timeout 180 backend frontend
 
+      - name: Check container dependency consistency
+        run: docker compose exec -T backend python -m pip check
+
       - name: Verify backend and frontend endpoints
         run: |
           curl --fail --show-error --retry 5 --retry-all-errors http://127.0.0.1:8000/health

@@ -1,5 +1,9 @@
+from types import SimpleNamespace
+
+import pytest
+
 from src.generation import llm_generator as llm_module
-from src.generation.llm_generator import LLMGenerator
+from src.generation.llm_generator import LLMGenerationError, LLMGenerator
 
 
 def test_normalize_context_supports_structured_context():
@@ -63,6 +67,8 @@ def test_llm_client_uses_explicit_timeout_and_retries(monkeypatch):
 
     monkeypatch.setenv("DEEPSEEK_API_KEY", "system-key")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    monkeypatch.setenv("MATHRAG_LLM_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("MATHRAG_LLM_THINKING_ENABLED", "true")
     monkeypatch.setattr(llm_module, "OpenAI", fake_openai)
 
     generator = LLMGenerator(timeout_seconds=12.5, max_retries=4)
@@ -70,6 +76,8 @@ def test_llm_client_uses_explicit_timeout_and_retries(monkeypatch):
     assert generator.api_key == "system-key"
     assert captured["timeout"] == 12.5
     assert captured["max_retries"] == 4
+    assert generator.model == "deepseek-v4-pro"
+    assert generator.thinking_enabled is True
 
 
 def test_llm_runtime_limits_are_validated(monkeypatch):
@@ -82,3 +90,61 @@ def test_llm_runtime_limits_are_validated(monkeypatch):
         assert "timeout" in str(exc)
     else:
         raise AssertionError("invalid timeout should fail")
+
+
+def test_complete_chat_passes_model_thinking_and_tool_options():
+    captured = {}
+    expected_message = SimpleNamespace(content=None, tool_calls=[object()])
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="tool_calls",
+                        message=expected_message,
+                    )
+                ]
+            )
+
+    generator = object.__new__(LLMGenerator)
+    generator.model = "deepseek-v4-flash"
+    generator.thinking_enabled = False
+    generator.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
+
+    result = generator.complete_chat(
+        messages=[{"role": "user", "content": "计算 1+1"}],
+        tools=[{"type": "function", "function": {"name": "calculate_math"}}],
+        tool_choice="required",
+    )
+
+    assert result is expected_message
+    assert captured["model"] == "deepseek-v4-flash"
+    assert captured["tool_choice"] == "required"
+    assert captured["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+def test_complete_chat_rejects_truncated_responses():
+    class FakeCompletions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="length",
+                        message=SimpleNamespace(content="partial"),
+                    )
+                ]
+            )
+
+    generator = object.__new__(LLMGenerator)
+    generator.model = "deepseek-v4-flash"
+    generator.thinking_enabled = False
+    generator.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
+
+    with pytest.raises(LLMGenerationError, match="未能完整生成"):
+        generator.complete_chat(messages=[{"role": "user", "content": "test"}])

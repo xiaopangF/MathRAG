@@ -21,6 +21,7 @@ def chat(request: ChatRequest):
             question=request.question,
             top_k=request.top_k,
             knowledge_base_id=request.knowledge_base_id,
+            mode=request.mode,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/xiaopangF/MathRAG/actions/workflows/ci.yml/badge.svg)](https://github.com/xiaopangF/MathRAG/actions/workflows/ci.yml)
 
-MathRAG 是一个面向高等数学教材的本地优先 RAG 问答系统。项目覆盖 PDF 教材解析、结构化切分、混合检索、二阶段重排、低置信度拒答、DeepSeek 生成、来源引用、多知识库管理和自动化评测，适合作为 RAG 工程实践、课程项目和面试展示项目。
+MathRAG 是一个面向高等数学教材的本地优先 RAG 问答系统。项目覆盖 PDF 教材解析、结构化切分、混合检索、二阶段重排、低置信度拒答、DeepSeek 生成、来源引用、多知识库管理和自动化评测，并提供带教材检索与安全符号计算工具的受控 Math Agent，适合作为 RAG/Agent 工程实践、课程项目和面试展示项目。
 
 当前主线是 `FastAPI + React + FAISS + BM25 + BGE Reranker + DeepSeek`。
 
@@ -13,6 +13,10 @@ MathRAG 是一个面向高等数学教材的本地优先 RAG 问答系统。项�
 - 检索链路完整：原问题走 BGE 向量召回，规则 Query Rewrite 扩展 BM25 词法召回，再经 RRF 排名融合和 BGE Reranker 精排。
 - 面向数学文本做了检索标准化：公式、定理名、中文数学符号进入 `search_text`，回答仍使用教材原文。
 - 有低置信度拒答机制：检索不足时减少无依据生成。
+- 提供 RAG / Agent 双模式：RAG 走一次固定检索生成流水线；Agent 在有限步数内自行选择教材检索或受限 SymPy 计算，并在前端展示可折叠的工具执行摘要。
+- Agent 不是无限自治循环：只开放 `search_textbook` 和 `calculate_math` 两个白名单工具，默认最多调用 4 次，跳过重复调用，并在工具额度耗尽后强制生成最终答案。
+- 数学计算不直接执行模型生成的代码：表达式先经过 AST 白名单解析，再在可超时终止的独立子进程中运行 SymPy；纯计算答案还会校验操作、表达式、变量和边界参数确实对应用户问题，并直接展示 SymPy 的确定性结果。
+- 教材型问题必须有达到阈值的检索片段；最终答案会再经过一次仅依据达标片段的 grounding 重写，并逐次校验 `[1]`、`[2]` 的编号、片段分数、引用句内容和逐句引用覆盖，失败则拒答。
 - 支持多知识库：上传 PDF 后异步构建索引，可查看任务历史、失败重试、删除知识库。
 - 工程可靠性比较完整：SQLite WAL、任务幂等、重启恢复、RAG 并发保护、请求体限制、结构化日志、`X-Request-ID`。
 - CI 覆盖后端测试、前端构建、Docker Compose 健康检查和评测集结构校验。
@@ -20,11 +24,7 @@ MathRAG 是一个面向高等数学教材的本地优先 RAG 问答系统。项�
 
 ## 当前基线
 
-自动化测试：
-
-```text
-142 passed
-```
+自动化测试覆盖检索、生成、API、并发可靠性、Agent 工具编排、安全表达式解析和前端构建；实际数量以当前 `pytest` 与 CI 输出为准。
 
 默认索引：
 
@@ -96,6 +96,8 @@ Copy-Item .env.example .env
 
 ```env
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
+MATHRAG_LLM_MODEL=deepseek-v4-flash
+MATHRAG_AGENT_ENABLED=true
 ```
 
 首次运行建议预热模型：
@@ -185,9 +187,16 @@ streamlit run app.py
 2. 上传 PDF 教材。
 3. 创建索引任务。
 4. 等待任务状态变为 `success`。
-5. 选择知识库并提问。
-6. 查看回答、引用片段、页码和相关性。
-7. 对答案点赞、点踩或提交文字反馈。
+5. 选择知识库，并在顶部选择 `RAG` 或 `Agent` 模式。
+6. 用“回答策略”滑块在“更快”和“参考更充分”之间调整返回片段数量。
+7. 提问并查看回答、引用片段、页码和相关性；Agent 模式还可以展开查看工具名称、状态和执行摘要。
+8. 对答案点赞、点踩或提交文字反馈。
+
+两种回答模式的定位：
+
+- `RAG`：固定执行一次检索、置信度判断和生成，调用链更短，适合普通教材问答。
+- `Agent`：模型在受控循环内选择教材检索或数学计算，适合“先查定义再计算”、符号求导、积分、极限等需要工具的任务。
+- 两种模式都复用当前知识库、Reranker 阈值和后端并发槽位；Agent 模式不会获得文件系统、网络、Shell 或数据库工具权限。
 
 可尝试的问题：
 
@@ -215,16 +224,34 @@ PDF 上传
   -> BGE Embedding + FAISS
   -> BM25 关键词索引
 
-用户问题
-  -> 数学检索标准化 -> 向量召回
-  -> Query Rewrite 术语别名和检索意图扩展 -> BM25 召回
-  -> 候选合并去重
-  -> RRF 排名融合
-  -> BGE Reranker 精排
-  -> 低置信度判断
-  -> DeepSeek 基于教材上下文生成
-  -> React 展示答案、引用和反馈
+用户问题 + mode
+  ├─ RAG
+  │    -> 数学检索标准化 -> 向量召回
+  │    -> Query Rewrite 术语别名和检索意图扩展 -> BM25 召回
+  │    -> 候选合并去重 -> RRF 排名融合 -> BGE Reranker 精排
+  │    -> 低置信度判断 -> DeepSeek 基于教材上下文生成
+  └─ Agent
+       -> DeepSeek 选择白名单工具
+       -> search_textbook：复用混合检索与 Reranker
+       -> calculate_math：安全解析 -> 独立子进程 -> SymPy
+       -> 工具结果回填，有限次数循环
+       -> grounding 重写与逐句证据校验 -> 回答或拒答
+
+React 展示答案、教材来源和反馈；Agent 回答额外提供可折叠的结构化执行摘要
 ```
+
+### Agent 请求流程与安全边界
+
+1. `POST /api/chat` 收到 `mode: agent` 后，在现有 RAG 并发槽位内创建本次 `MathAgent`，不会递归调用问答接口。
+2. 第一次模型请求要求选择工具，后续请求允许继续调用工具或直接回答；总调用次数由 `MATHRAG_AGENT_MAX_TOOL_CALLS` 限制，默认 4，合法范围为 1 到 8。
+3. `search_textbook` 的参数经过 Pydantic 校验，单次 `top_k` 最大为 5；片段按 `vector_id` 去重，一轮最多保留 8 个上下文。
+4. `calculate_math` 只接受声明过的操作、变量、常量、运算符和数学函数。解析器拒绝属性访问、导入、文件调用、未知名称和额外参数，不使用 `eval`、`sympify` 或模型生成代码。
+5. 符号计算在独立进程中运行，默认 4 秒超时；表达式最长 240 字符、AST 最多 80 个节点，常量、指数和输出长度也有限制。纯计算路径只有在操作、原表达式、变量、上下限或极限点与用户问题匹配时才接受工具结果，最终答案显示被计算的表达式。
+6. 相同工具与相同参数的重复调用会跳过。达到调用上限后，系统只允许基于已有工具结果生成最终答案。
+7. 定义、定理、条件、证明和教材解释类问题必须有达到 `MATHRAG_MIN_RERANK_SCORE` 的教材片段；纯计算问题可以只依赖成功的计算结果。
+8. 有达标教材片段时，草稿会经过一次独立 grounding 重写；随后逐次检查每个 `[n]` 的范围、对应片段分数、引用句与片段的内容绑定，并拒绝夹带无引用事实句的回答。任一检查失败都返回证据不足，不把模型记忆当教材结论。
+
+前端执行摘要只展示工具标签、工具名、状态和简短结果，不展示模型内部思维过程。Agent 仍是教材问答功能，不是通用自动化代理；它没有访问 Shell、任意文件、网络或数据库的能力。
 
 后端可靠性层：
 
@@ -248,6 +275,8 @@ PDF 上传
 |---|---:|---|
 | `DEEPSEEK_API_KEY` | 无 | DeepSeek API Key |
 | `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | OpenAI 兼容 API 地址 |
+| `MATHRAG_LLM_MODEL` | `deepseek-v4-flash` | DeepSeek 聊天与工具调用模型 |
+| `MATHRAG_LLM_THINKING_ENABLED` | `false` | 是否启用 DeepSeek thinking；默认关闭以缩短普通问答与工具循环延迟 |
 | `HF_ENDPOINT` | `https://huggingface.co` | HuggingFace 下载端点 |
 | `MATHRAG_EMBEDDING_MODEL` | `BAAI/bge-small-zh-v1.5` | Embedding 模型 ID 或本地目录 |
 | `MATHRAG_RERANKER_MODEL` | `BAAI/bge-reranker-base` | Reranker 模型 ID 或本地目录 |
@@ -266,6 +295,8 @@ PDF 上传
 | `MATHRAG_JOB_MAX_ATTEMPTS` | `3` | 索引任务最大尝试次数 |
 | `MATHRAG_RAG_MAX_CONCURRENCY` | `2` | 同时进入模型流水线的请求数 |
 | `MATHRAG_QUERY_REWRITE_ENABLED` | `true` | 是否对 BM25 查询启用规则改写 |
+| `MATHRAG_AGENT_ENABLED` | `true` | 是否允许 `/api/chat` 使用 Agent 模式 |
+| `MATHRAG_AGENT_MAX_TOOL_CALLS` | `4` | 单次 Agent 问答的工具调用上限，范围 1 到 8 |
 | `MATHRAG_LLM_TIMEOUT_SECONDS` | `30` | 单次 LLM 请求超时 |
 | `MATHRAG_LLM_MAX_RETRIES` | `2` | LLM SDK 最大重试次数 |
 
@@ -303,6 +334,10 @@ PDF 上传
   "knowledge_base_id": "default"
 }
 ```
+
+请求可以增加 `mode` 字段，取值为 `rag` 或 `agent`；省略时保持向后兼容并使用 `rag`。例如，教材解释配合符号求导的任务可以把 `mode` 设置为 `agent`。
+
+问答响应通过 `mode` 标记实际模式；Agent 响应额外包含 `agent_steps`，每一步提供 `tool`、`label`、`status`、`input` 和 `summary`。这些字段是结构化执行记录，不包含模型的内部思维过程。普通 RAG 响应的 `agent_steps` 为空数组。
 
 所有响应都包含 `X-Request-ID`。错误响应保留前端兼容的 `detail`，并提供稳定错误编码：
 
@@ -390,6 +425,14 @@ python validate_eval_dataset.py --eval-path data/eval/questions.grounded.dev.jso
 .venv\Scripts\python.exe -m pytest -q
 ```
 
+只运行 Agent 专项测试：
+
+```powershell
+.venv\Scripts\python.exe -m pytest -q tests/test_math_agent.py tests/test_llm_generator.py tests/test_backend_reliability.py
+```
+
+Agent 测试覆盖恶意表达式拒绝、基础微积分与独立计算进程、教材检索、`top_k` 限制、重复调用跳过、确定性纯计算回答、错误操作或算式拒绝、概念题计算绕过、低分或无关引用、弱内容重合、重复引用夹带、无引用事实句、运行异常脱敏，以及 DeepSeek 工具消息中的 `reasoning_content` 回放。模型调用使用测试替身，不要求在 CI 中配置真实 API Key。
+
 前端生产构建：
 
 ```powershell
@@ -421,6 +464,7 @@ GitHub Actions 会自动完成：
 - 前端生产构建
 - Docker Compose 启动和健康检查
 - 评测集结构校验
+- Agent 工具编排、安全计算和 API 模式回归测试
 
 ## 项目结构
 
@@ -429,6 +473,7 @@ MathRAG/
 ├── backend/                 # FastAPI 路由、Schema、服务和运行时核心
 ├── frontend/                # React + Vite 管理台
 ├── src/
+│   ├── agent/               # 受控 Agent 状态机与安全 SymPy 工具
 │   ├── loader/              # PDF 文本提取
 │   ├── splitter/            # 结构化切分
 │   ├── retriever/           # FAISS、BM25 和 Reranker
@@ -469,6 +514,8 @@ MathRAG/
 - 当前是本地单用户模型，没有账号、权限隔离和租户数据边界。
 - 后台任务使用 FastAPI `BackgroundTasks`，适合单实例、本地使用和项目演示；多实例生产部署需要迁移到 Celery/RQ + Redis 等外部队列。
 - 答案忠实度和引用正确性仍需单独评测。
+- Agent 会增加一次或多次 LLM 请求，因此通常比固定 RAG 模式更慢、消耗更多 API 配额；工具上限控制了单次请求的最坏循环次数，但不代表结果一定正确。
+- 安全 SymPy 工具只支持已声明的变量、函数与六类操作，不是完整计算机代数输入接口；超出白名单或超过复杂度、时间和输出限制的表达式会被拒绝。
 
 ## 路线图
 
@@ -482,9 +529,12 @@ MathRAG/
 - [x] 类型化配置、结构化日志和 request ID
 - [x] SQLite WAL、任务幂等、并发保护和输入限制
 - [x] 100 题 grounded 评测集和 Recall@K / MRR 报告
+- [x] RAG / Agent 双模式、受控工具循环和前端结构化执行摘要
+- [x] AST 白名单解析、独立进程超时的 SymPy 数学工具
+- [x] Agent 教材证据约束、引用校验和失败拒答
 - [ ] 修复页眉导致的章节 metadata 丢失和误继承
 - [ ] 父子块上下文扩展
 - [ ] 引用一致性、答案忠实度和低置信度评测
-- [ ] SymPy 数学工具调用和答案验证
+- [ ] Agent 答案正确性、工具选择和端到端成本评测
 - [ ] Redis + Celery/RQ 生产任务队列
 - [ ] 用户认证、权限隔离和在线演示部署
