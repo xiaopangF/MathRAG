@@ -547,10 +547,55 @@ progress::-moz-progress-bar {
   border-bottom: 2px solid var(--border-color);
 }
 
-.topbar > div {
+.topbarIntro {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.topbarControls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  min-width: 0;
+}
+
+.modeSwitch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(62px, 1fr));
+  width: 142px;
+  flex: 0 0 142px;
+  padding: 3px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: #EEF1F6;
+}
+
+.modeSwitch button {
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modeSwitch button:hover:not(:disabled) {
+  color: var(--primary-dark);
+}
+
+.modeSwitch button.active {
+  background: var(--bg-secondary);
+  color: var(--primary-dark);
+  box-shadow: 0 1px 5px rgba(45, 52, 54, 0.14);
+}
+
+.modeSwitch button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 
 .topbar h2 {
@@ -779,6 +824,7 @@ progress::-moz-progress-bar {
 
 .metaLine {
   display: flex;
+  flex-wrap: wrap;
   gap: 18px;
   margin-top: 14px;
   color: var(--text-secondary);
@@ -792,6 +838,19 @@ progress::-moz-progress-bar {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.metaLine .answerMode {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #E8F8F5;
+  color: #087F66;
+  font-weight: 700;
+}
+
+.metaLine .answerMode.agent {
+  background: #F0EEFF;
+  color: var(--primary-dark);
 }
 
 details {
@@ -811,6 +870,103 @@ summary {
 
 summary:hover {
   color: var(--primary-dark);
+}
+
+.agentTrace {
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.agentTrace > summary {
+  width: 100%;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.agentSteps {
+  display: grid;
+  margin-top: 8px;
+}
+
+.agentStep {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.agentStepIndex {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #E8ECF1;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.agentStepBody {
+  min-width: 0;
+}
+
+.agentStepTitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agentStepTitle strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.agentStepTitle code {
+  color: var(--text-light);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.agentStepBody p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.agentStepStatus {
+  min-width: 44px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #EEF1F6;
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.agentStepStatus.done {
+  background: #E8F8F5;
+  color: #087F66;
+}
+
+.agentStepStatus.failed {
+  background: #FDEAEA;
+  color: #C0392B;
+}
+
+.agentStepStatus.running {
+  background: #FEF9E7;
+  color: #9A6700;
 }
 
 .contexts {
@@ -1011,8 +1167,18 @@ summary:hover {
     gap: 8px;
   }
 
+  .topbarControls {
+    width: 100%;
+    align-items: flex-end;
+  }
+
   .answerStrategy {
     width: 100%;
+  }
+
+  .modeSwitch {
+    flex-basis: 132px;
+    width: 132px;
   }
 
   .composer {
@@ -1033,5 +1199,27 @@ summary:hover {
 
   .message {
     padding: 14px 16px;
+  }
+
+  .agentStep {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .agentStepStatus {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbarControls {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .modeSwitch {
+    width: 100%;
   }
 }

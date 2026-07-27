@@ -176,7 +176,12 @@ class RAGService:
         question: str,
         top_k: int = 3,
         knowledge_base_id: str = "default",
+        mode: str = "rag",
     ) -> dict[str, Any]:
+        if mode not in {"rag", "agent"}:
+            raise ValueError("不支持的问答模式")
+        if mode == "agent" and not runtime_settings.agent_enabled:
+            raise ValueError("Agent 模式未启用")
         acquired = self._inference_slots.acquire(
             timeout=self._acquire_timeout_seconds,
         )
@@ -189,6 +194,12 @@ class RAGService:
                 "问答服务当前繁忙，请稍后重试"
             )
         try:
+            if mode == "agent":
+                return self._ask_agent(
+                    question=question,
+                    top_k=top_k,
+                    knowledge_base_id=knowledge_base_id,
+                )
             return self._ask(
                 question=question,
                 top_k=top_k,
@@ -206,6 +217,8 @@ class RAGService:
         if knowledge_base_id == "default":
             result = self._get_pipeline().ask(question, top_k=top_k)
             result["knowledge_base_id"] = knowledge_base_id
+            result["mode"] = "rag"
+            result["agent_steps"] = []
             return result
 
         from src.pipeline.qa_pipeline import DEFAULT_MIN_RERANK_SCORE, INSUFFICIENT_CONTEXT_ANSWER
@@ -224,6 +237,8 @@ class RAGService:
                     "reason": "no_context",
                 },
                 "knowledge_base_id": knowledge_base_id,
+                "mode": "rag",
+                "agent_steps": [],
             }
 
         contexts = self._contexts_from_chunks(chunks)
@@ -245,7 +260,48 @@ class RAGService:
             "contexts": contexts,
             "confidence": confidence,
             "knowledge_base_id": knowledge_base_id,
+            "mode": "rag",
+            "agent_steps": [],
         }
+
+    def _ask_agent(
+        self,
+        question: str,
+        top_k: int = 3,
+        knowledge_base_id: str = "default",
+    ) -> dict[str, Any]:
+        from src.agent.math_agent import MathAgent
+        from src.pipeline.qa_pipeline import DEFAULT_MIN_RERANK_SCORE
+
+        if knowledge_base_id == "default":
+            pipeline = self._get_pipeline()
+            retriever = pipeline.retriever
+            generator = pipeline.generator
+        else:
+            retriever = self._get_retriever(knowledge_base_id)
+            generator = self._get_generator()
+
+        agent = MathAgent(
+            retriever=retriever,
+            generator=generator,
+            max_tool_calls=runtime_settings.agent_max_tool_calls,
+            min_rerank_score=DEFAULT_MIN_RERANK_SCORE,
+        )
+        started_at = time.perf_counter()
+        result = agent.run(question, top_k=top_k)
+        result["knowledge_base_id"] = knowledge_base_id
+        logger.info(
+            "agent_run_completed",
+            extra={
+                "knowledge_base_id": knowledge_base_id,
+                "agent_step_count": len(result["agent_steps"]),
+                "duration_ms": round(
+                    (time.perf_counter() - started_at) * 1000,
+                    2,
+                ),
+            },
+        )
+        return result
 
 
 rag_service = RAGService()

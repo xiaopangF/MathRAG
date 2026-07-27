@@ -26,6 +26,10 @@ def test_compose_defines_backend_frontend_and_persistent_model_cache():
     assert compose["x-backend-environment"]["MATHRAG_ALLOW_RUNTIME_API_KEY"] == "${MATHRAG_ALLOW_RUNTIME_API_KEY:-false}"
     assert compose["x-backend-environment"]["MATHRAG_JOB_MAX_ATTEMPTS"] == "${MATHRAG_JOB_MAX_ATTEMPTS:-3}"
     assert compose["x-backend-environment"]["MATHRAG_QUERY_REWRITE_ENABLED"] == "${MATHRAG_QUERY_REWRITE_ENABLED:-true}"
+    assert compose["x-backend-environment"]["MATHRAG_AGENT_ENABLED"] == "${MATHRAG_AGENT_ENABLED:-true}"
+    assert compose["x-backend-environment"]["MATHRAG_AGENT_MAX_TOOL_CALLS"] == "${MATHRAG_AGENT_MAX_TOOL_CALLS:-4}"
+    assert compose["x-backend-environment"]["MATHRAG_LLM_MODEL"] == "${MATHRAG_LLM_MODEL:-deepseek-v4-flash}"
+    assert compose["x-backend-environment"]["MATHRAG_LLM_THINKING_ENABLED"] == "${MATHRAG_LLM_THINKING_ENABLED:-false}"
     assert compose["x-backend-environment"]["MATHRAG_MAX_JSON_BODY_MB"] == "${MATHRAG_MAX_JSON_BODY_MB:-1}"
     assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_ENABLED"] == "${MATHRAG_PDF_OCR_ENABLED:-true}"
     assert compose["x-backend-environment"]["MATHRAG_PDF_OCR_LANGUAGES"] == "${MATHRAG_PDF_OCR_LANGUAGES:-chi_sim+eng}"
@@ -44,9 +48,10 @@ def test_compose_defines_backend_frontend_and_persistent_model_cache():
 def test_backend_dockerfile_installs_cpu_torch_before_runtime_requirements():
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "ARG TORCH_VERSION=2.6.0+cpu" in dockerfile
+    assert "ARG TORCH_VERSION=2.7.1+cpu" in dockerfile
     assert "https://download.pytorch.org/whl/cpu" in dockerfile
     assert dockerfile.index("torch==${TORCH_VERSION}") < dockerfile.index("-r requirements.txt")
+    assert "python -m pip check" in dockerfile
 
 
 def test_backend_dockerfile_installs_tesseract_ocr_languages():
@@ -112,6 +117,10 @@ def test_ci_checks_supported_runtimes_and_docker_stack():
     assert set(smoke_job["needs"]) == {"backend-tests", "frontend-build"}
     assert any(step.get("run") == "docker compose config --quiet" for step in smoke_steps)
     assert any("docker compose up" in step.get("run", "") for step in smoke_steps)
+    assert any(
+        step.get("run") == "docker compose exec -T backend python -m pip check"
+        for step in smoke_steps
+    )
     assert any("127.0.0.1:5173/health" in step.get("run", "") for step in smoke_steps)
     assert any(
         step.get("run") == "docker compose down --remove-orphans"

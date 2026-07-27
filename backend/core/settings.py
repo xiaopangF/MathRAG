@@ -69,6 +69,13 @@ def _read_ocr_languages(name: str, default: str) -> str:
     return value
 
 
+def _read_model_name(name: str, default: str) -> str:
+    value = os.getenv(name, default).strip()
+    if not re.fullmatch(r"[A-Za-z0-9._/-]{1,128}", value):
+        raise SettingsError(f"{name} is invalid")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class BackendSettings:
     app_name: str
@@ -91,6 +98,10 @@ class BackendSettings:
     rag_max_concurrency: int
     rag_acquire_timeout_seconds: float
     rag_query_rewrite_enabled: bool
+    agent_enabled: bool
+    agent_max_tool_calls: int
+    llm_model: str
+    llm_thinking_enabled: bool
     llm_timeout_seconds: float
     llm_max_retries: int
     request_id_header: str = "X-Request-ID"
@@ -193,6 +204,21 @@ class BackendSettings:
             rag_query_rewrite_enabled=_read_bool(
                 "MATHRAG_QUERY_REWRITE_ENABLED",
                 True,
+            ),
+            agent_enabled=_read_bool("MATHRAG_AGENT_ENABLED", True),
+            agent_max_tool_calls=_read_int(
+                "MATHRAG_AGENT_MAX_TOOL_CALLS",
+                4,
+                minimum=1,
+                maximum=8,
+            ),
+            llm_model=_read_model_name(
+                "MATHRAG_LLM_MODEL",
+                "deepseek-v4-flash",
+            ),
+            llm_thinking_enabled=_read_bool(
+                "MATHRAG_LLM_THINKING_ENABLED",
+                False,
             ),
             llm_timeout_seconds=_read_float(
                 "MATHRAG_LLM_TIMEOUT_SECONDS",

@@ -50,6 +50,47 @@ def test_backend_exposes_core_routes():
     assert client.get("/api/settings").status_code == 200
 
 
+def test_chat_passes_agent_mode_to_rag_service(monkeypatch):
+    captured = {}
+
+    def fake_ask(**kwargs):
+        captured.update(kwargs)
+        return {
+            "query": kwargs["question"],
+            "answer": "Agent 已完成。",
+            "contexts": [],
+            "confidence": {"is_sufficient": True},
+            "knowledge_base_id": kwargs["knowledge_base_id"],
+            "mode": "agent",
+            "agent_steps": [
+                {
+                    "tool": "calculate_math",
+                    "label": "数学计算",
+                    "status": "success",
+                    "input": {},
+                    "summary": "计算结果：2",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(routes_chat.rag_service, "ask", fake_ask)
+
+    response = TestClient(app).post(
+        "/api/chat",
+        json={"question": "计算 1+1", "mode": "agent", "top_k": 2},
+    )
+
+    assert response.status_code == 200
+    assert captured == {
+        "question": "计算 1+1",
+        "top_k": 2,
+        "knowledge_base_id": "default",
+        "mode": "agent",
+    }
+    assert response.json()["mode"] == "agent"
+    assert response.json()["agent_steps"][0]["tool"] == "calculate_math"
+
+
 def test_request_id_is_preserved_in_response():
     response = TestClient(app).get(
         "/health",

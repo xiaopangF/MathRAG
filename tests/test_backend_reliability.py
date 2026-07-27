@@ -7,6 +7,7 @@ import pytest
 
 from backend.core.database import UnsupportedSchemaVersionError
 from backend.services import knowledge_base_service as kb_module
+from backend.services import rag_service as rag_module
 from backend.services.feedback_service import FEEDBACK_SCHEMA_VERSION, FeedbackService
 from backend.services.knowledge_base_service import (
     BACKEND_SCHEMA_VERSION,
@@ -423,6 +424,48 @@ def test_rag_service_rejects_when_inference_capacity_is_exhausted():
             service.ask("什么是导数？")
     finally:
         service._inference_slots.release()
+
+
+def test_rag_service_dispatches_agent_mode_inside_existing_capacity_slot(monkeypatch):
+    service = RAGService(max_concurrency=1, acquire_timeout_seconds=0)
+    monkeypatch.setattr(
+        rag_module,
+        "runtime_settings",
+        SimpleNamespace(agent_enabled=True),
+    )
+    captured = {}
+
+    def fake_agent(**kwargs):
+        captured.update(kwargs)
+        return {"mode": "agent"}
+
+    monkeypatch.setattr(service, "_ask_agent", fake_agent)
+
+    result = service.ask(
+        "计算极限",
+        top_k=2,
+        knowledge_base_id="default",
+        mode="agent",
+    )
+
+    assert result == {"mode": "agent"}
+    assert captured == {
+        "question": "计算极限",
+        "top_k": 2,
+        "knowledge_base_id": "default",
+    }
+
+
+def test_rag_service_rejects_agent_mode_when_disabled(monkeypatch):
+    service = RAGService(max_concurrency=1, acquire_timeout_seconds=0)
+    monkeypatch.setattr(
+        rag_module,
+        "runtime_settings",
+        SimpleNamespace(agent_enabled=False),
+    )
+
+    with pytest.raises(ValueError, match="未启用"):
+        service.ask("计算极限", mode="agent")
 
 
 def test_rag_service_invalidates_cached_knowledge_base():

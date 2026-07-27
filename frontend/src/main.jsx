@@ -19,6 +19,23 @@ function answerStrategyLabel(topK) {
   return ["", "最快", "快速", "均衡", "充分", "深入"][topK] || "均衡";
 }
 
+function agentStepStatus(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (["success", "completed", "complete", "done"].includes(normalized)) {
+    return { label: "完成", tone: "done" };
+  }
+  if (["failed", "error"].includes(normalized)) {
+    return { label: "失败", tone: "failed" };
+  }
+  if (["running", "in_progress"].includes(normalized)) {
+    return { label: "执行中", tone: "running" };
+  }
+  if (normalized === "skipped") {
+    return { label: "已跳过", tone: "pending" };
+  }
+  return { label: normalized ? status : "待执行", tone: "pending" };
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, options);
   const data = await response.json().catch(() => null);
@@ -78,6 +95,7 @@ function App() {
   const [activeJob, setActiveJob] = useState(null);
   const [question, setQuestion] = useState("");
   const [topK, setTopK] = useState(3);
+  const [mode, setMode] = useState("rag");
   const [messages, setMessages] = useState([]);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
@@ -242,11 +260,13 @@ function App() {
     event.preventDefault();
     const trimmed = question.trim();
     if (!trimmed) return;
+    const requestMode = mode;
 
     const userMessage = {
       role: "user",
       question: trimmed,
       knowledge_base_id: selectedKb,
+      mode: requestMode,
     };
     setMessages((items) => [...items, userMessage]);
     setQuestion("");
@@ -261,9 +281,13 @@ function App() {
           question: trimmed,
           top_k: topK,
           knowledge_base_id: selectedKb,
+          mode: requestMode,
         }),
       });
-      setMessages((items) => [...items, { role: "assistant", ...result }]);
+      setMessages((items) => [
+        ...items,
+        { role: "assistant", ...result, mode: result.mode || requestMode },
+      ]);
     } catch (err) {
       setError(err.message);
       setMessages((items) => [
@@ -275,6 +299,8 @@ function App() {
           contexts: [],
           confidence: {},
           knowledge_base_id: selectedKb,
+          mode: requestMode,
+          agent_steps: [],
         },
       ]);
     } finally {
@@ -473,32 +499,54 @@ function App() {
 
       <section className="workspace">
         <header className="topbar">
-          <div>
+          <div className="topbarIntro">
             <h2>💬 智能问答</h2>
             <p>📖 {selectedKb === "default" ? "默认知识库" : selectedKb}</p>
           </div>
-          <label className="answerStrategy" htmlFor="answer-strategy">
-            <span className="strategyHeader">
-              <span>回答策略</span>
-              <strong>{answerStrategyLabel(topK)}</strong>
-            </span>
-            <input
-              id="answer-strategy"
-              className="strategyRange"
-              type="range"
-              min="1"
-              max="5"
-              step="1"
-              value={topK}
-              onChange={(event) => setTopK(Number(event.target.value))}
-              aria-label="回答策略"
-              aria-valuetext={answerStrategyLabel(topK)}
-            />
-            <span className="strategyLabels" aria-hidden="true">
-              <span>更快</span>
-              <span>参考更充分</span>
-            </span>
-          </label>
+          <div className="topbarControls">
+            <div className="modeSwitch" role="group" aria-label="回答模式">
+              <button
+                type="button"
+                aria-pressed={mode === "rag"}
+                className={cn(mode === "rag" && "active")}
+                onClick={() => setMode("rag")}
+                disabled={asking}
+              >
+                RAG
+              </button>
+              <button
+                type="button"
+                aria-pressed={mode === "agent"}
+                className={cn(mode === "agent" && "active")}
+                onClick={() => setMode("agent")}
+                disabled={asking}
+              >
+                Agent
+              </button>
+            </div>
+            <label className="answerStrategy" htmlFor="answer-strategy">
+              <span className="strategyHeader">
+                <span>回答策略</span>
+                <strong>{answerStrategyLabel(topK)}</strong>
+              </span>
+              <input
+                id="answer-strategy"
+                className="strategyRange"
+                type="range"
+                min="1"
+                max="5"
+                step="1"
+                value={topK}
+                onChange={(event) => setTopK(Number(event.target.value))}
+                aria-label="回答策略"
+                aria-valuetext={answerStrategyLabel(topK)}
+              />
+              <span className="strategyLabels" aria-hidden="true">
+                <span>更快</span>
+                <span>参考更充分</span>
+              </span>
+            </label>
+          </div>
         </header>
 
         {error && <div className="error">{error}</div>}
@@ -526,6 +574,9 @@ function App() {
                   <MathMarkdown content={message.answer} />
                 </div>
                 <div className="metaLine">
+                  <span className={cn("answerMode", message.mode === "agent" && "agent")}>
+                    {message.mode === "agent" ? "Agent" : "RAG"}
+                  </span>
                   <span>
                     📊 置信度：
                     {message.confidence?.top_rerank_score == null
@@ -534,14 +585,42 @@ function App() {
                   </span>
                   <span>📄 引用：{message.contexts?.length || 0}</span>
                 </div>
+                {message.mode === "agent" && !!message.agent_steps?.length && (
+                  <details className="agentTrace">
+                    <summary>Agent 执行过程 · {message.agent_steps.length} 步</summary>
+                    <div className="agentSteps">
+                      {message.agent_steps.map((step, stepIndex) => {
+                        const stepStatus = agentStepStatus(step.status);
+                        return (
+                          <div className="agentStep" key={`${step.tool || "step"}-${stepIndex}`}>
+                            <span className="agentStepIndex" aria-hidden="true">{stepIndex + 1}</span>
+                            <div className="agentStepBody">
+                              <div className="agentStepTitle">
+                                <strong>{step.label || step.tool || `步骤 ${stepIndex + 1}`}</strong>
+                                {step.label && step.tool && <code>{step.tool}</code>}
+                              </div>
+                              {step.summary && <p>{step.summary}</p>}
+                            </div>
+                            <span className={cn("agentStepStatus", stepStatus.tone)}>
+                              {stepStatus.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                )}
                 {!!message.contexts?.length && (
                   <details>
                     <summary>📖 查看检索片段</summary>
                     <div className="contexts">
-                      {message.contexts.slice(0, 3).map((context, contextIndex) => (
+                      {(message.mode === "agent"
+                        ? message.contexts
+                        : message.contexts.slice(0, 3)
+                      ).map((context, contextIndex) => (
                         <div className="context" key={context.vector_id || contextIndex}>
                           <strong>
-                            📄 {context.source_file || context.file || context.title || `片段 ${contextIndex + 1}`}
+                            [{contextIndex + 1}] 📄 {context.source_file || context.file || context.title || `片段 ${contextIndex + 1}`}
                           </strong>
                           <p>{context.content}</p>
                         </div>
@@ -588,7 +667,11 @@ function App() {
               </article>
             ),
           )}
-          {asking && <div className="thinking">🧠 正在检索知识并生成答案...</div>}
+          {asking && (
+            <div className="thinking">
+              {mode === "agent" ? "Agent 正在规划步骤并调用工具..." : "正在检索知识并生成答案..."}
+            </div>
+          )}
         </div>
 
         <form className="composer" onSubmit={ask}>
@@ -599,7 +682,7 @@ function App() {
             rows="3"
           />
           <button type="submit" className="primary" disabled={asking || !question.trim()}>
-            {asking ? '⏳ 思考中...' : '🚀 发送'}
+            {asking ? (mode === "agent" ? "Agent 执行中..." : "思考中...") : "发送"}
           </button>
         </form>
       </section>

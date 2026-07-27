@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=4000)
     top_k: int = Field(default=3, ge=1, le=10)
+    mode: Literal["rag", "agent"] = "rag"
     knowledge_base_id: str = Field(
         default="default",
         pattern=r"^(default|kb_[0-9a-f]{12})$",
@@ -26,3 +27,5 @@ class ChatResponse(BaseModel):
     contexts: list[dict[str, Any]]
     confidence: dict[str, Any] = Field(default_factory=dict)
     knowledge_base_id: str = "default"
+    mode: Literal["rag", "agent"] = "rag"
+    agent_steps: list[dict[str, Any]] = Field(default_factory=list)
