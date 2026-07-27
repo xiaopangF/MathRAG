@@ -43,12 +43,16 @@ Index: FAISS IndexFlatIP + normalized embeddings
 | 页码命中 | 55.79% | 82.11% | 93.68% | 0.6972 |
 | 章节命中 | 64.21% | 81.05% | 82.11% | 0.7184 |
 
+![100 题 grounded-dev 检索基线实验](docs/assets/retrieval-baseline.png)
+
 Query Rewrite 单变量消融（其余参数相同）：
 
 | Variant | Keyword R@1/3/5 | Keyword MRR | Page R@1/3/5 | Page 未命中 |
 |---|---:|---:|---:|---:|
 | `full` | 88.42% / 98.95% / 100.00% | 0.9377 | 55.79% / 82.11% / 93.68% | 6 |
 | `no_query_rewrite` | 89.47% / 98.95% / 100.00% | 0.9412 | 55.79% / 82.11% / 91.58% | 8 |
+
+![Query Rewrite 单变量消融实验](docs/assets/query-rewrite-ablation.png)
 
 Query Rewrite 只作用于 BM25，不改写向量查询。它让 Page Recall@5 提升 2.10 个百分点，并把页码未命中从 8 个降到 6 个；代价是 Keyword Recall@1 下降 1.05 个百分点，但 Keyword Recall@5 仍为 100%。当前默认开启，优先提高引用依据的覆盖率。
 
@@ -61,6 +65,8 @@ Query Rewrite 只作用于 BM25，不改写向量查询。它让 Page Recall@5 �
 | `no_bm25` | 去掉 BM25 候选 | 86.32% / 95.79% / 97.89% | 0.9153 | 57.89% / 81.05% / 90.53% | 63.16% / 78.95% / 80.00% |
 | `no_reranker` | 去掉二阶段 Reranker | 82.11% / 92.63% / 95.79% | 0.8711 | 44.21% / 73.68% / 85.26% | 50.53% / 70.53% / 74.74% |
 | `narrow_recall` | 一阶段候选深度降为 5 + 5 | 93.68% / 97.89% / 98.95% | 0.9588 | 55.79% / 81.05% / 88.42% | 65.26% / 76.84% / 77.89% |
+
+![检索组件消融实验](docs/assets/retrieval-component-ablation.png)
 
 组件消融结论：Reranker 对页码和章节定位贡献最大；BM25 和 RRF 对关键词 Top5 与结构化命中有正贡献；`narrow_recall` 虽然 Keyword R@1 更高，但 Top5、页码和章节均下降，不适合作为默认配置。
 
